@@ -1,0 +1,179 @@
+/* -----------------------------------------------------------------------
+   Cytoscape.js stylesheet — defined as CSS for reference.
+   The actual stylesheet is passed as a JS object in CausalGraph.tsx.
+   ----------------------------------------------------------------------- */
+
+/* Base styles for all nodes */
+/* node { background-color: #64748b; label: data(label); ... } */
+
+/* Level-specific node colors */
+/* .level-2 { background-color: #2563eb; } */  /* Top clusters – blue */
+/* .level-1 { background-color: #7c3aed; } */  /* Mid clusters – purple */
+/* .level-0 { background-color: #059669; } */  /* Leaf clusters – green */
+
+/* Compound (expanded parent) node */
+/* :compound { background-opacity: 0.1; border-width: 2px; } */
+
+/* Edge styles */
+/* edge { line-color: #94a3b8; target-arrow-shape: triangle; } */
+
+/* --------------------------------------------------------------------------
+   Global layout styles
+   -------------------------------------------------------------------------- */
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.app-layout {
+  display: grid;
+  grid-template-rows: 48px 1fr;
+  grid-template-columns: 1fr 320px;
+  height: 100vh;
+  gap: 0;
+}
+
+.app-header {
+  grid-column: 1 / -1;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+}
+
+.app-header h1 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin: 0;
+}
+
+.graph-container {
+  position: relative;
+  background: #0f172a;
+  overflow: hidden;
+}
+
+.sidebar {
+  background: #1e293b;
+  border-left: 1px solid #334155;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cluster-panel {
+  background: #0f172a;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.cluster-panel h2 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.tag {
+  background: #334155;
+  color: #94a3b8;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.post-item {
+  padding: 8px 0;
+  border-bottom: 1px solid #1e293b;
+}
+
+.post-item:last-child {
+  border-bottom: none;
+}
+
+.post-title {
+  font-size: 12px;
+  color: #e2e8f0;
+  line-height: 1.4;
+  margin: 0 0 4px 0;
+}
+
+.post-meta {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.post-drawer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 320px;
+  max-height: 40vh;
+  background: #1e293b;
+  border-top: 2px solid #f59e0b;
+  overflow-y: auto;
+  padding: 16px;
+  z-index: 100;
+}
+
+.post-drawer h3 {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fbbf24;
+}
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.filter-bar label {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.filter-bar select,
+.filter-bar input {
+  background: #0f172a;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.loading {
+  color: #64748b;
+  font-size: 13px;
+  padding: 16px;
+  text-align: center;
+}
+
+.hint {
+  font-size: 11px;
+  color: #475569;
+  margin-top: 8px;
+}

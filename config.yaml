@@ -1,0 +1,49 @@
+pipeline:
+  parquet_path: "rscience-submissions.parquet"
+  db_path: "data/pipeline.db"
+  batch_size: 5000        # Posts per batch for step 1
+  min_score: 1            # Skip posts with score below this
+
+  step1_identification:
+    implementation: "regex"       # Options: regex | llm_openai | llm_anthropic | zero_shot
+
+    # Zero-shot options (only used when implementation = zero_shot)
+    zero_shot_model: "facebook/bart-large-mnli"
+    zero_shot_threshold: 0.75
+
+    # LLM options (only used when implementation = llm_openai or llm_anthropic)
+    llm_model: "claude-haiku-4-5-20251001"
+    llm_batch_size: 50
+
+  step2_extraction:
+    implementation: "regex_spacy"   # Options: regex_spacy | llm_openai | llm_anthropic
+    spacy_model: "en_core_web_sm"   # or en_core_web_trf for better accuracy
+
+    # LLM options (only used when implementation = llm_*)
+    llm_model: "claude-haiku-4-5-20251001"
+    llm_max_tokens: 512
+
+  step3_hierarchy:
+    implementation: "tfidf_ward"  # Options: embedding_hdbscan | tfidf_ward | llm
+    n_levels: 3                          # Number of hierarchy levels to build
+
+    # Embedding options (only used when implementation = embedding_hdbscan)
+    embedding_model: "all-MiniLM-L6-v2"
+    min_cluster_size: 10
+    min_samples: 5
+
+    # TF-IDF options (only used when implementation = tfidf_ward)
+    tfidf_max_features: 5000
+    tfidf_n_top_clusters: 200
+
+    # LLM options (only used when implementation = llm)
+    llm_model: "claude-haiku-4-5-20251001"
+    llm_n_topics: 30
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+  db_path: "data/pipeline.db"
+  cors_origins:
+    - "http://localhost:5173"   # Vite dev server
+    - "http://localhost:3000"

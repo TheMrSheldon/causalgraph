@@ -1,0 +1,59 @@
+export interface ClusterNode {
+  id: number;
+  label: string;
+  level: number; // 0=leaf, 1=mid, 2=top
+  parent_id: number | null;
+  member_count: number;
+}
+
+export interface GraphEdge {
+  source_cluster_id: number;
+  target_cluster_id: number;
+  relation_count: number;
+  post_count: number;
+  avg_score: number;
+}
+
+export interface GraphData {
+  nodes: ClusterNode[];
+  edges: GraphEdge[];
+}
+
+export interface PostSummary {
+  id: string;
+  title: string;
+  score: number;
+  num_comments: number;
+  created_utc: number;
+  permalink: string | null;
+}
+
+export interface PostDetail extends PostSummary {
+  cause_text: string | null;
+  effect_text: string | null;
+  confidence: number | null;
+}
+
+export interface ClusterDetail {
+  cluster: ClusterNode;
+  children: ClusterNode[];
+  top_events: string[];
+  posts: PostSummary[];
+}
+
+export interface PaginatedPosts {
+  posts: PostSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface LevelCounts {
+  levels: number[];
+  counts: Record<string, number>;
+}
+
+export interface SelectedEdge {
+  source_cluster_id: number;
+  target_cluster_id: number;
+}

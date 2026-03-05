@@ -1,0 +1,125 @@
+"""Cluster expand/collapse and detail endpoints."""
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from api.dependencies import get_db
+from api.models import (
+    ClusterDetail,
+    ClusterNode,
+    GraphEdge,
+    GraphResponse,
+    PaginatedPosts,
+    PostSummary,
+)
+from pipeline.db import Database
+
+router = APIRouter(prefix="/api/clusters", tags=["clusters"])
+
+
+def _to_node(raw: dict) -> ClusterNode:
+    return ClusterNode(
+        id=raw["id"],
+        label=raw["label"],
+        level=raw["level"],
+        parent_id=raw["parent_id"],
+        member_count=raw["member_count"],
+    )
+
+
+@router.get("/{cluster_id}", response_model=ClusterDetail)
+def get_cluster(cluster_id: int, db: Database = Depends(get_db)) -> ClusterDetail:
+    """Return cluster metadata, its children, top event phrases, and sample posts."""
+    raw = db.get_cluster_by_id(cluster_id)
+    if raw is None:
+        raise HTTPException(status_code=404, detail=f"Cluster {cluster_id} not found")
+
+    children_raw = db.get_children(cluster_id)
+    top_events = db.get_top_events_for_cluster(cluster_id, n=20)
+    posts_raw, _ = db.get_posts_for_cluster(cluster_id, limit=10, sort="score")
+
+    return ClusterDetail(
+        cluster=_to_node(raw),
+        children=[_to_node(c) for c in children_raw],
+        top_events=top_events,
+        posts=[
+            PostSummary(
+                id=p["id"],
+                title=p["title"],
+                score=p["score"],
+                num_comments=p["num_comments"],
+                created_utc=p["created_utc"],
+                permalink=p["permalink"],
+            )
+            for p in posts_raw
+        ],
+    )
+
+
+@router.get("/{cluster_id}/expand", response_model=GraphResponse)
+def expand_cluster(
+    cluster_id: int,
+    min_post_count: int = Query(default=1, ge=1),
+    db: Database = Depends(get_db),
+) -> GraphResponse:
+    """
+    Return child nodes of this cluster and all intra-cluster edges.
+    Used by the frontend to drill into a compound node.
+    """
+    parent = db.get_cluster_by_id(cluster_id)
+    if parent is None:
+        raise HTTPException(status_code=404, detail=f"Cluster {cluster_id} not found")
+
+    children_raw = db.get_children(cluster_id)
+    if not children_raw:
+        # Leaf node: return the node itself with its posts as a hint
+        return GraphResponse(nodes=[_to_node(parent)], edges=[])
+
+    child_ids = [c["id"] for c in children_raw]
+    raw_edges = db.get_edges(cluster_ids=child_ids, min_post_count=min_post_count)
+
+    return GraphResponse(
+        nodes=[_to_node(c) for c in children_raw],
+        edges=[
+            GraphEdge(
+                source_cluster_id=e["source_cluster_id"],
+                target_cluster_id=e["target_cluster_id"],
+                relation_count=e["relation_count"],
+                post_count=e["post_count"],
+                avg_score=round(e["avg_score"] or 0.0, 1),
+            )
+            for e in raw_edges
+            if e["source_cluster_id"] != e["target_cluster_id"]
+        ],
+    )
+
+
+@router.get("/{cluster_id}/posts", response_model=PaginatedPosts)
+def get_cluster_posts(
+    cluster_id: int,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    sort: str = Query(default="score", pattern="^(score|date|comments)$"),
+    db: Database = Depends(get_db),
+) -> PaginatedPosts:
+    """Return paginated posts associated with this cluster."""
+    if db.get_cluster_by_id(cluster_id) is None:
+        raise HTTPException(status_code=404, detail=f"Cluster {cluster_id} not found")
+
+    posts_raw, total = db.get_posts_for_cluster(cluster_id, limit=limit, offset=offset, sort=sort)
+    return PaginatedPosts(
+        posts=[
+            PostSummary(
+                id=p["id"],
+                title=p["title"],
+                score=p["score"],
+                num_comments=p["num_comments"],
+                created_utc=p["created_utc"],
+                permalink=p["permalink"],
+            )
+            for p in posts_raw
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
