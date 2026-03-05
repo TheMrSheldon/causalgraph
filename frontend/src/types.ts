@@ -70,6 +70,52 @@ export interface SelectedEdge {
   target_cluster_id: number;
 }
 
+// --- Path Finder -------------------------------------------------------
+
+export interface PathNode {
+  id: string
+  label: string
+  level: number
+  type: 'source' | 'intermediate' | 'target'
+}
+
+export interface PathLink {
+  source: string  // PathNode.id
+  target: string  // PathNode.id
+  post_count: number
+}
+
+export interface PathsResponse {
+  nodes: PathNode[]
+  links: PathLink[]
+}
+
+// --- Text Analyzer -----------------------------------------------------
+
+export interface AnalysisSpan {
+  start: number
+  end: number
+  type: 'cause' | 'effect'
+}
+
+export interface AnalysisRelation {
+  cause_text: string
+  effect_text: string
+  cause_cluster_id: number | null
+  cause_cluster_label: string | null
+  effect_cluster_id: number | null
+  effect_cluster_label: string | null
+  corpus_post_count: number
+}
+
+export interface AnalysisResponse {
+  text: string
+  spans: AnalysisSpan[]
+  relations: AnalysisRelation[]
+}
+
+// --- Shared ------------------------------------------------------------
+
 export type VisualizationMode = 'no' | 'opacity' | 'size'
 export type NodeSpacing = 'tight' | 'normal' | 'spread'
 

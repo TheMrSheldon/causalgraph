@@ -2,14 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CausalGraph } from './components/CausalGraph'
 import { ClusterPanel } from './components/ClusterPanel'
 import { FilterBar } from './components/FilterBar'
+import { PathFinderScreen } from './components/PathFinderScreen'
 import { PostList } from './components/PostList'
 import { SettingsModal } from './components/SettingsModal'
+import { TextAnalyzerScreen } from './components/TextAnalyzerScreen'
 import { useClusterExpand } from './hooks/useClusterExpand'
 import { useGraph } from './hooks/useGraph'
 import './styles/graph.css'
 import type { GraphSettings, SelectedEdge } from './types'
 
+type Screen = 'explorer' | 'pathfinder' | 'analyzer'
+
 export default function App() {
+  const [activeScreen, setActiveScreen] = useState<Screen>('explorer')
   const [level, setLevel] = useState(2)
   const [minPostCount, setMinPostCount] = useState(1)
   const [selectedCluster, setSelectedCluster] = useState<number | null>(null)
@@ -115,9 +120,7 @@ export default function App() {
   )
 
   const handleNodeRightClick = useCallback(
-    (clusterId: number) => {
-      collapseCluster(clusterId)
-    },
+    (clusterId: number) => { collapseCluster(clusterId) },
     [collapseCluster]
   )
 
@@ -136,8 +139,13 @@ export default function App() {
     setSelectedEdge(null)
   }, [])
 
+  const isExplorer = activeScreen === 'explorer'
+
   return (
-    <div className="app-layout" style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}>
+    <div
+      className={`app-layout${isExplorer ? '' : ' no-sidebar'}`}
+      style={isExplorer ? { '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties : undefined}
+    >
       <header className="app-header">
         <a className="app-header-brand" href="https://webis.de/" target="_blank" rel="noopener noreferrer">
           <img src="/webis-logo.png" alt="Webis" />
@@ -146,75 +154,111 @@ export default function App() {
         <div className="app-header-divider" />
         <h1>r/science Causal Graph</h1>
         <div className="app-header-spacer" />
-        <FilterBar
-          level={level}
-          minPostCount={minPostCount}
-          onLevelChange={setLevel}
-          onMinPostCountChange={setMinPostCount}
-        />
-        {isLoading && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Loading…</span>}
-        <button className="header-icon-btn" onClick={() => setSettingsOpen(true)} title="Settings">
-          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-            <line x1="3" y1="5" x2="17" y2="5"/>
-            <line x1="3" y1="10" x2="17" y2="10"/>
-            <line x1="3" y1="15" x2="17" y2="15"/>
-            <circle cx="7" cy="5" r="2" fill="currentColor" stroke="none"/>
-            <circle cx="13" cy="10" r="2" fill="currentColor" stroke="none"/>
-            <circle cx="7" cy="15" r="2" fill="currentColor" stroke="none"/>
-          </svg>
-        </button>
+        {isExplorer && (
+          <>
+            <FilterBar
+              level={level}
+              minPostCount={minPostCount}
+              onLevelChange={setLevel}
+              onMinPostCountChange={setMinPostCount}
+            />
+            {isLoading && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Loading…</span>}
+            <button className="header-icon-btn" onClick={() => setSettingsOpen(true)} title="Settings">
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <line x1="3" y1="5" x2="17" y2="5"/>
+                <line x1="3" y1="10" x2="17" y2="10"/>
+                <line x1="3" y1="15" x2="17" y2="15"/>
+                <circle cx="7" cy="5" r="2" fill="currentColor" stroke="none"/>
+                <circle cx="13" cy="10" r="2" fill="currentColor" stroke="none"/>
+                <circle cx="7" cy="15" r="2" fill="currentColor" stroke="none"/>
+              </svg>
+            </button>
+          </>
+        )}
       </header>
 
-      <SettingsModal
-        open={settingsOpen}
-        settings={settings}
-        onSettingsChange={setSettings}
-        onClose={() => setSettingsOpen(false)}
-      />
+      <nav className="app-tabs">
+        {([
+          ['explorer',   'Graph Explorer'],
+          ['pathfinder', 'Path Finder'],
+          ['analyzer',   'Text Analyzer'],
+        ] as [Screen, string][]).map(([id, label]) => (
+          <button
+            key={id}
+            className={`app-tab${activeScreen === id ? ' app-tab--active' : ''}`}
+            onClick={() => setActiveScreen(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
 
-      <main className="graph-container">
-        {graphData && (
-          <CausalGraph
-            nodes={graphData.nodes}
-            edges={graphData.edges}
-            expandedNodes={expandedNodes}
-            childNodesByParent={childNodesByParent}
-            childEdgesByParent={childEdgesByParent}
+      {isExplorer && (
+        <>
+          <SettingsModal
+            open={settingsOpen}
             settings={settings}
-            selectedClusterId={selectedCluster}
-            onNodeDblClick={handleNodeDblClick}
-            onNodeRightClick={handleNodeRightClick}
-            onNodeClick={handleNodeClick}
-            onEdgeClick={handleEdgeClick}
+            onSettingsChange={setSettings}
+            onClose={() => setSettingsOpen(false)}
           />
-        )}
-      </main>
 
-      <aside className="sidebar">
-        <div
-          className="sidebar-resize-handle"
-          onMouseDown={(e) => {
-            dragState.current = { startX: e.clientX, startWidth: sidebarWidth }
-            e.preventDefault()
-          }}
-        />
-        {selectedEdge
-          ? <PostList
-              edge={selectedEdge}
-              onClose={() => setSelectedEdge(null)}
-              sourceLabel={clusterLabels.get(selectedEdge.source_cluster_id)}
-              targetLabel={clusterLabels.get(selectedEdge.target_cluster_id)}
-              onClusterClick={handleClusterClick}
+          <main className="graph-container">
+            {graphData && (
+              <CausalGraph
+                nodes={graphData.nodes}
+                edges={graphData.edges}
+                expandedNodes={expandedNodes}
+                childNodesByParent={childNodesByParent}
+                childEdgesByParent={childEdgesByParent}
+                settings={settings}
+                selectedClusterId={selectedCluster}
+                onNodeDblClick={handleNodeDblClick}
+                onNodeRightClick={handleNodeRightClick}
+                onNodeClick={handleNodeClick}
+                onEdgeClick={handleEdgeClick}
+              />
+            )}
+          </main>
+
+          <aside className="sidebar">
+            <div
+              className="sidebar-resize-handle"
+              onMouseDown={(e) => {
+                dragState.current = { startX: e.clientX, startWidth: sidebarWidth }
+                e.preventDefault()
+              }}
             />
-          : <ClusterPanel
-              clusterId={selectedCluster}
-              clusterLabels={clusterLabels}
-              onClusterClick={handleClusterClick}
-              isExpanded={isExpanded}
-              onCollapseRequest={collapseCluster}
-            />
-        }
-      </aside>
+            {selectedEdge
+              ? <PostList
+                  edge={selectedEdge}
+                  onClose={() => setSelectedEdge(null)}
+                  sourceLabel={clusterLabels.get(selectedEdge.source_cluster_id)}
+                  targetLabel={clusterLabels.get(selectedEdge.target_cluster_id)}
+                  onClusterClick={handleClusterClick}
+                />
+              : <ClusterPanel
+                  clusterId={selectedCluster}
+                  clusterLabels={clusterLabels}
+                  onClusterClick={handleClusterClick}
+                  isExpanded={isExpanded}
+                  onCollapseRequest={collapseCluster}
+                />
+            }
+          </aside>
+        </>
+      )}
+
+      {activeScreen === 'pathfinder' && (
+        <div className="screen-fullwidth">
+          <PathFinderScreen />
+        </div>
+      )}
+
+      {activeScreen === 'analyzer' && (
+        <div className="screen-fullwidth">
+          <TextAnalyzerScreen />
+        </div>
+      )}
 
       <footer className="app-footer">
         <span>
