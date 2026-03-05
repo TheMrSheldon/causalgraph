@@ -3,6 +3,7 @@ import type {
   ClusterDetail,
   GraphData,
   LevelCounts,
+  PaginatedEdgePosts,
   PaginatedPosts,
   PostDetail,
 } from '../types'
@@ -27,8 +28,10 @@ export const api = {
     return data
   },
 
-  expandCluster: async (id: number): Promise<GraphData> => {
-    const { data } = await http.get<GraphData>(`/clusters/${id}/expand`)
+  expandCluster: async (id: number, contextIds: number[] = []): Promise<GraphData> => {
+    const { data } = await http.get<GraphData>(`/clusters/${id}/expand`, {
+      params: contextIds.length ? { context_ids: contextIds.join(',') } : undefined,
+    })
     return data
   },
 
@@ -49,8 +52,8 @@ export const api = {
     targetClusterId: number,
     limit = 50,
     offset = 0
-  ): Promise<PaginatedPosts> => {
-    const { data } = await http.get<PaginatedPosts>('/posts', {
+  ): Promise<PaginatedEdgePosts> => {
+    const { data } = await http.get<PaginatedEdgePosts>('/posts', {
       params: {
         source_cluster_id: sourceClusterId,
         target_cluster_id: targetClusterId,

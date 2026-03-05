@@ -497,15 +497,22 @@ class Database:
             tgt_ph = ",".join("?" * len(tgt_leaves))
             params = src_leaves + tgt_leaves
 
+            # One row per post: pick the first matching causal relation (lowest id)
             sql = f"""
-                SELECT DISTINCT p.id, p.title, p.score, p.num_comments, p.created_utc, p.permalink
+                SELECT p.id, p.title, p.score, p.num_comments, p.created_utc, p.permalink,
+                       cr.cause_text, cr.effect_text
                 FROM posts p
-                JOIN causal_relations cr ON cr.post_id = p.id
-                JOIN cluster_members cm_cause
-                  ON cm_cause.relation_id = cr.id AND cm_cause.role = 'cause'
-                JOIN cluster_members cm_effect
-                  ON cm_effect.relation_id = cr.id AND cm_effect.role = 'effect'
-                WHERE cm_cause.cluster_id IN ({src_ph}) AND cm_effect.cluster_id IN ({tgt_ph})
+                JOIN (
+                    SELECT cr2.post_id, MIN(cr2.id) AS min_cr_id
+                    FROM causal_relations cr2
+                    JOIN cluster_members cm_cause
+                      ON cm_cause.relation_id = cr2.id AND cm_cause.role = 'cause'
+                    JOIN cluster_members cm_effect
+                      ON cm_effect.relation_id = cr2.id AND cm_effect.role = 'effect'
+                    WHERE cm_cause.cluster_id IN ({src_ph}) AND cm_effect.cluster_id IN ({tgt_ph})
+                    GROUP BY cr2.post_id
+                ) best ON best.post_id = p.id
+                JOIN causal_relations cr ON cr.id = best.min_cr_id
                 ORDER BY p.score DESC
                 LIMIT ? OFFSET ?
             """

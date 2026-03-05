@@ -48,6 +48,18 @@ export interface PaginatedPosts {
   offset: number;
 }
 
+export interface EdgePostSummary extends PostSummary {
+  cause_text: string | null;
+  effect_text: string | null;
+}
+
+export interface PaginatedEdgePosts {
+  posts: EdgePostSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface LevelCounts {
   levels: number[];
   counts: Record<string, number>;

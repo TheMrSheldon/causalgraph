@@ -13,11 +13,11 @@ export function useClusterExpand() {
   const [loading, setLoading] = useState(false)
 
   const expandCluster = useCallback(
-    async (clusterId: number) => {
+    async (clusterId: number, contextIds: number[] = []) => {
       if (!cache.has(clusterId)) {
         setLoading(true)
         try {
-          const data = await api.expandCluster(clusterId)
+          const data = await api.expandCluster(clusterId, contextIds)
           setCache((prev) => new Map(prev).set(clusterId, data))
         } finally {
           setLoading(false)

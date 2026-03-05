@@ -17,18 +17,30 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(340)
   const dragState = useRef<{ startX: number; startWidth: number } | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settings, setSettings] = useState<GraphSettings>({
-    clusterSizeMode: 'no',
-    linkSizeMode: 'size',
-    showEdgeLabels: false,
-    showMemberCount: false,
-    dimOnSelection: true,
-    highlightOnHover: false,
-    nodeSpacing: 'normal',
-    animateLayout: true,
-    showArrows: true,
-    showLegend: true,
+  const [settings, setSettings] = useState<GraphSettings>(() => {
+    const defaults: GraphSettings = {
+      clusterSizeMode: 'no',
+      linkSizeMode: 'size',
+      showEdgeLabels: false,
+      showMemberCount: false,
+      dimOnSelection: true,
+      highlightOnHover: false,
+      nodeSpacing: 'normal',
+      animateLayout: true,
+      showArrows: true,
+      showLegend: true,
+    }
+    try {
+      const saved = localStorage.getItem('graph-settings')
+      return saved ? { ...defaults, ...JSON.parse(saved) } : defaults
+    } catch {
+      return defaults
+    }
   })
+
+  useEffect(() => {
+    try { localStorage.setItem('graph-settings', JSON.stringify(settings)) } catch { /* ignore */ }
+  }, [settings])
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
@@ -86,11 +98,20 @@ export default function App() {
         if (isExpanded(clusterId)) {
           collapseCluster(clusterId)
         } else {
-          expandCluster(clusterId)
+          const contextIds: number[] = []
+          for (const node of graphData?.nodes ?? []) {
+            if (node.id !== clusterId) contextIds.push(node.id)
+          }
+          for (const [parentId, nodes] of childNodesByParent.entries()) {
+            if (isExpanded(parentId)) {
+              for (const n of nodes) if (n.id !== clusterId) contextIds.push(n.id)
+            }
+          }
+          expandCluster(clusterId, contextIds)
         }
       }
     },
-    [isExpanded, expandCluster, collapseCluster]
+    [isExpanded, expandCluster, collapseCluster, graphData, childNodesByParent]
   )
 
   const handleNodeRightClick = useCallback(
@@ -109,13 +130,6 @@ export default function App() {
     setSelectedEdge(edge)
     setSelectedCluster(null)
   }, [])
-
-  const handleExpandRequest = useCallback(
-    (clusterId: number, _level: number) => {
-      expandCluster(clusterId)
-    },
-    [expandCluster]
-  )
 
   const handleClusterClick = useCallback((clusterId: number) => {
     setSelectedCluster(clusterId)
@@ -167,6 +181,7 @@ export default function App() {
             childNodesByParent={childNodesByParent}
             childEdgesByParent={childEdgesByParent}
             settings={settings}
+            selectedClusterId={selectedCluster}
             onNodeDblClick={handleNodeDblClick}
             onNodeRightClick={handleNodeRightClick}
             onNodeClick={handleNodeClick}
@@ -191,7 +206,13 @@ export default function App() {
               targetLabel={clusterLabels.get(selectedEdge.target_cluster_id)}
               onClusterClick={handleClusterClick}
             />
-          : <ClusterPanel clusterId={selectedCluster} onExpandRequest={handleExpandRequest} />
+          : <ClusterPanel
+              clusterId={selectedCluster}
+              clusterLabels={clusterLabels}
+              onClusterClick={handleClusterClick}
+              isExpanded={isExpanded}
+              onCollapseRequest={collapseCluster}
+            />
         }
       </aside>
 

@@ -201,6 +201,7 @@ interface CausalGraphProps {
   childNodesByParent: Map<number, ClusterNode[]>
   childEdgesByParent: Map<number, GraphEdge[]>
   settings: GraphSettings
+  selectedClusterId?: number | null
   onNodeDblClick: (clusterId: number, level: number) => void
   onNodeRightClick: (clusterId: number) => void
   onNodeClick: (clusterId: number) => void
@@ -215,13 +216,15 @@ function toCytoscapeElements(
   childEdgesByParent: Map<number, GraphEdge[]>
 ): ElementDefinition[] {
   const elements: ElementDefinition[] = []
-  const allNodes: ClusterNode[] = [...nodes]
+  // Expanded parents are removed from the graph — replaced by their children
+  const allNodes: ClusterNode[] = nodes.filter((n) => !expandedNodes.has(n.id))
   const allEdges: GraphEdge[] = [...edges]
 
-  // Inject child nodes and edges for each expanded cluster
+  // Add child nodes (free-floating, no parent reference) and edges
   for (const parentId of expandedNodes) {
     const children = childNodesByParent.get(parentId)
-    if (children) allNodes.push(...children)
+    // Skip children that are themselves expanded (replaced by their own children)
+    if (children) allNodes.push(...children.filter((c) => !expandedNodes.has(c.id)))
     const childEdges = childEdgesByParent.get(parentId)
     if (childEdges) allEdges.push(...childEdges)
   }
@@ -229,11 +232,6 @@ function toCytoscapeElements(
   const nodeIdSet = new Set(allNodes.map((n) => `cluster-${n.id}`))
 
   for (const node of allNodes) {
-    const parentId =
-      node.parent_id !== null && expandedNodes.has(node.parent_id)
-        ? `cluster-${node.parent_id}`
-        : undefined
-
     elements.push({
       data: {
         id: `cluster-${node.id}`,
@@ -241,7 +239,6 @@ function toCytoscapeElements(
         label_with_count: `${node.label}\n${node.member_count.toLocaleString()}`,
         level: node.level,
         member_count: node.member_count,
-        ...(parentId ? { parent: parentId } : {}),
       },
       classes: `level-${node.level}`,
     })
@@ -280,6 +277,7 @@ export function CausalGraph({
   childNodesByParent,
   childEdgesByParent,
   settings,
+  selectedClusterId,
   onNodeDblClick,
   onNodeRightClick,
   onNodeClick,
@@ -290,12 +288,49 @@ export function CausalGraph({
   const settingsRef = useRef(settings)
   const selectedNodeRef = useRef<number | null>(null)
   const layoutInitRef = useRef(false)
+  const prevNodesRef = useRef<ClusterNode[]>([])
+  const prevEdgesRef = useRef<GraphEdge[]>([])
   const [contextMenu, setContextMenu] = useState<{
     x: number; y: number; clusterId: number; level: number
   } | null>(null)
 
-  // Keep settingsRef current
+  // Keep refs current
   useEffect(() => { settingsRef.current = settings }, [settings])
+  const childNodesByParentRef = useRef(childNodesByParent)
+  useEffect(() => { childNodesByParentRef.current = childNodesByParent }, [childNodesByParent])
+
+  // Highlight a single node's edges
+  const applyHighlight = useCallback((node: cytoscape.NodeSingular) => {
+    const cy = cyRef.current
+    if (!cy) return
+    cy.elements().removeClass('edge-outgoing edge-incoming dimmed')
+    const outgoing = node.outgoers('edge')
+    const incoming = node.incomers('edge')
+    const neighborNodes = node.neighborhood('node')
+    const kept = outgoing.union(incoming).union(neighborNodes).union(node)
+    if (settingsRef.current.dimOnSelection) cy.elements().not(kept).addClass('dimmed')
+    outgoing.addClass('edge-outgoing')
+    incoming.addClass('edge-incoming')
+  }, [])
+
+  // Highlight all children of an expanded parent (parent not in graph)
+  const applyChildrenHighlight = useCallback((parentId: number) => {
+    const cy = cyRef.current
+    if (!cy) return
+    const children = childNodesByParentRef.current.get(parentId)
+    if (!children) return
+    const childIdSet = new Set(children.map((c) => `cluster-${c.id}`))
+    const childNodes = cy.nodes().filter((n) => childIdSet.has(n.id()))
+    if (childNodes.length === 0) return
+    cy.elements().unselect().removeClass('edge-outgoing edge-incoming dimmed')
+    childNodes.select()
+    const outgoing = childNodes.outgoers('edge')
+    const incoming = childNodes.incomers('edge')
+    const kept = outgoing.union(incoming).union(childNodes.neighborhood('node')).union(childNodes)
+    if (settingsRef.current.dimOnSelection) cy.elements().not(kept).addClass('dimmed')
+    outgoing.addClass('edge-outgoing')
+    incoming.addClass('edge-incoming')
+  }, [])
 
   // Initialize Cytoscape once
   useEffect(() => {
@@ -322,17 +357,6 @@ export function CausalGraph({
     if (!cy) return
 
     cy.removeAllListeners()
-
-    const applyHighlight = (node: cytoscape.NodeSingular) => {
-      cy.elements().removeClass('edge-outgoing edge-incoming dimmed')
-      const outgoing = node.outgoers('edge')
-      const incoming = node.incomers('edge')
-      const neighborNodes = node.neighborhood('node')
-      const kept = outgoing.union(incoming).union(neighborNodes).union(node)
-      if (settingsRef.current.dimOnSelection) cy.elements().not(kept).addClass('dimmed')
-      outgoing.addClass('edge-outgoing')
-      incoming.addClass('edge-incoming')
-    }
 
     cy.on('dblclick', 'node', (evt) => {
       const id = parseInt(evt.target.id().replace('cluster-', ''), 10)
@@ -367,6 +391,7 @@ export function CausalGraph({
       if (selectedNodeRef.current !== null) {
         const sel = cy.$(`#cluster-${selectedNodeRef.current}`)
         if (sel.length > 0) applyHighlight(sel)
+        else applyChildrenHighlight(selectedNodeRef.current)
       }
     })
 
@@ -382,10 +407,10 @@ export function CausalGraph({
     cy.on('tap', (evt) => {
       if (evt.target === cy) {
         selectedNodeRef.current = null
-        cy.elements().removeClass('edge-outgoing edge-incoming dimmed')
+        cy.elements().unselect().removeClass('edge-outgoing edge-incoming dimmed')
       }
     })
-  }, [onNodeDblClick, onNodeRightClick, onNodeClick, onEdgeClick])
+  }, [applyHighlight, applyChildrenHighlight, onNodeDblClick, onNodeRightClick, onNodeClick, onEdgeClick])
 
   // Re-apply style when settings change (no layout re-run)
   useEffect(() => {
@@ -398,10 +423,35 @@ export function CausalGraph({
     cyRef.current?.layout(buildFcoseLayout(settings.nodeSpacing, settings.animateLayout)).run()
   }, [settings.nodeSpacing, settings.animateLayout]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Update elements when data changes
+  // Programmatically highlight node when selectedClusterId changes (from sidebar links)
+  useEffect(() => {
+    if (selectedClusterId == null) return
+    const cy = cyRef.current
+    if (!cy) return
+    selectedNodeRef.current = selectedClusterId
+    const node = cy.$(`#cluster-${selectedClusterId}`)
+    if (node.length > 0) {
+      cy.elements().unselect()
+      node.select()
+      applyHighlight(node)
+    } else {
+      // Parent is expanded — highlight its children instead
+      applyChildrenHighlight(selectedClusterId)
+    }
+  }, [selectedClusterId, applyHighlight, applyChildrenHighlight])
+
+  // Update elements when data changes — incremental on expand/collapse, full rebuild on new graph data
   useEffect(() => {
     const cy = cyRef.current
     if (!cy) return
+
+    const isFullRebuild =
+      cy.elements().length === 0 ||
+      prevNodesRef.current !== nodes ||
+      prevEdgesRef.current !== edges
+
+    prevNodesRef.current = nodes
+    prevEdgesRef.current = edges
 
     const elements = toCytoscapeElements(
       nodes,
@@ -411,10 +461,37 @@ export function CausalGraph({
       childEdgesByParent
     )
 
-    cy.style(buildCytoscapeStyle(settingsRef.current))
-    cy.elements().removeClass('edge-outgoing edge-incoming dimmed').remove()
-    cy.add(elements)
-    cy.layout(buildFcoseLayout(settingsRef.current.nodeSpacing, settingsRef.current.animateLayout)).run()
+    if (isFullRebuild) {
+      cy.style(buildCytoscapeStyle(settingsRef.current))
+      cy.elements().removeClass('edge-outgoing edge-incoming dimmed').remove()
+      cy.add(elements)
+      cy.layout(buildFcoseLayout(settingsRef.current.nodeSpacing, settingsRef.current.animateLayout)).run()
+      return
+    }
+
+    // Incremental diff: remove stale elements, add new ones
+    const targetIds = new Set(elements.map((e) => e.data.id as string))
+    cy.elements().filter((ele) => !targetIds.has(ele.id())).remove()
+
+    const currentIds = new Set(cy.elements().map((ele) => ele.id()))
+    const toAdd = elements.filter((e) => !currentIds.has(e.data.id as string))
+    if (toAdd.length > 0) {
+      cy.add(toAdd)
+      cy.layout(buildFcoseLayout(settingsRef.current.nodeSpacing, settingsRef.current.animateLayout)).run()
+    }
+
+    // Re-apply selection highlight after expand/collapse
+    const sel = selectedNodeRef.current
+    if (sel !== null) {
+      const node = cy.$(`#cluster-${sel}`)
+      if (node.length > 0) {
+        cy.elements().unselect()
+        node.select()
+        applyHighlight(node)
+      } else {
+        applyChildrenHighlight(sel)
+      }
+    }
   }, [nodes, edges, expandedNodes, childNodesByParent, childEdgesByParent]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Dismiss context menu on outside click

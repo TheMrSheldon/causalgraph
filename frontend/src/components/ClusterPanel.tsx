@@ -3,7 +3,10 @@ import type { PostSummary } from '../types'
 
 interface ClusterPanelProps {
   clusterId: number | null
-  onExpandRequest: (clusterId: number, level: number) => void
+  clusterLabels?: Map<number, string>
+  onClusterClick?: (clusterId: number) => void
+  isExpanded?: (id: number) => boolean
+  onCollapseRequest?: (id: number) => void
 }
 
 const LEVEL_META = [
@@ -28,14 +31,14 @@ function PostItem({ post }: { post: PostSummary }) {
   )
 }
 
-export function ClusterPanel({ clusterId, onExpandRequest }: ClusterPanelProps) {
+export function ClusterPanel({ clusterId, clusterLabels, onClusterClick, isExpanded, onCollapseRequest }: ClusterPanelProps) {
   const { data, isLoading } = useCluster(clusterId)
 
   if (clusterId === null) {
     return (
       <div className="cluster-panel">
         <p className="hint">Click a node to see details.</p>
-        <p className="hint">Double-click to expand / right-click to collapse.</p>
+        <p className="hint">Double-click to expand sub-clusters.</p>
       </div>
     )
   }
@@ -46,13 +49,35 @@ export function ClusterPanel({ clusterId, onExpandRequest }: ClusterPanelProps) 
 
   const levelMeta = LEVEL_META[data.cluster.level] ?? { label: `L${data.cluster.level}`, cls: 'wlabel wlabel-muted' }
 
+  const parentId = data.cluster.parent_id
+  const parentLabel = parentId != null ? (clusterLabels?.get(parentId) ?? `Cluster ${parentId}`) : null
+  const expanded = isExpanded?.(data.cluster.id) ?? false
+
   return (
     <div className="cluster-panel">
       <h2>{data.cluster.label}</h2>
       <p className="cluster-panel-meta">
         <span className={levelMeta.cls}>{levelMeta.label}</span>
         {data.cluster.member_count.toLocaleString()} events
+        {parentLabel && onClusterClick && (
+          <>
+            {' · '}
+            <button className="internal-link" onClick={() => onClusterClick(parentId!)}>
+              {parentLabel}
+            </button>
+          </>
+        )}
       </p>
+
+      {expanded && onCollapseRequest && (
+        <button
+          className="cluster-collapse-btn"
+          onClick={() => onCollapseRequest(data.cluster.id)}
+        >
+          <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="13 4 7 10 13 16"/></svg>
+          Collapse sub-clusters
+        </button>
+      )}
 
       {data.top_events.length > 0 && (
         <>
@@ -71,15 +96,11 @@ export function ClusterPanel({ clusterId, onExpandRequest }: ClusterPanelProps) 
             Sub-clusters ({data.children.length})
           </div>
           {data.children.slice(0, 6).map((c) => (
-            <div
-              key={c.id}
-              className="subcluster-item"
-              onClick={() => onExpandRequest(c.id, c.level)}
-            >
-              <span className="subcluster-chevron" aria-hidden="true">
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="7 4 13 10 7 16" /></svg>
-              </span>
-              <span className="subcluster-title">{c.label}</span>
+            <div key={c.id} className="subcluster-item">
+              <button className="internal-link" onClick={() => onClusterClick?.(c.id)}>
+                {c.label}
+              </button>
+              {' '}
               <span className="subcluster-count">({c.member_count.toLocaleString()})</span>
             </div>
           ))}

@@ -60,11 +60,12 @@ def get_cluster(cluster_id: int, db: Database = Depends(get_db)) -> ClusterDetai
 def expand_cluster(
     cluster_id: int,
     min_post_count: int = Query(default=1, ge=1),
+    context_ids: str = Query(default="", description="Comma-separated IDs of other visible clusters"),
     db: Database = Depends(get_db),
 ) -> GraphResponse:
     """
-    Return child nodes of this cluster and all intra-cluster edges.
-    Used by the frontend to drill into a compound node.
+    Return child nodes of this cluster plus intra-cluster edges and border edges
+    to any clusters listed in context_ids.
     """
     parent = db.get_cluster_by_id(cluster_id)
     if parent is None:
@@ -76,7 +77,9 @@ def expand_cluster(
         return GraphResponse(nodes=[_to_node(parent)], edges=[])
 
     child_ids = [c["id"] for c in children_raw]
-    raw_edges = db.get_edges(cluster_ids=child_ids, min_post_count=min_post_count)
+    ext_ids = [int(x) for x in context_ids.split(",") if x.strip().lstrip("-").isdigit()]
+    all_ids = child_ids + [eid for eid in ext_ids if eid not in child_ids]
+    raw_edges = db.get_edges(cluster_ids=all_ids, min_post_count=min_post_count)
 
     return GraphResponse(
         nodes=[_to_node(c) for c in children_raw],

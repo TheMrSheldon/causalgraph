@@ -57,3 +57,15 @@ class PaginatedPosts(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class EdgePostSummary(PostSummary):
+    cause_text: str | None = None
+    effect_text: str | None = None
+
+
+class PaginatedEdgePosts(BaseModel):
+    posts: list[EdgePostSummary]
+    total: int
+    limit: int
+    offset: int

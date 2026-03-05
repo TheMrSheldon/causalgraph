@@ -427,29 +427,8 @@ html, body, #root {
 /* ── Sub-cluster links ───────────────────────────────────────────────── */
 
 .subcluster-item {
-  font-size: 12px;
-  color: var(--webis-text);
-  cursor: pointer;
   padding: 3px 0;
   line-height: 1.4;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.subcluster-item:hover .subcluster-title {
-  text-decoration: underline;
-}
-
-.subcluster-chevron {
-  flex-shrink: 0;
-  color: var(--webis-text);
-  display: flex;
-  align-items: center;
-}
-
-.subcluster-title {
-  color: var(--webis-link);
 }
 
 .subcluster-count {
@@ -519,6 +498,49 @@ html, body, #root {
 .drawer-close:hover {
   background: var(--webis-muted-bg);
   color: var(--webis-text);
+}
+
+/* ── Collapse sub-clusters button ───────────────────────────────────── */
+
+.cluster-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 1px solid var(--webis-border);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--webis-text);
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.cluster-collapse-btn:hover {
+  background: var(--webis-muted-bg);
+  border-color: #bbb;
+}
+
+/* ── Event span highlights ───────────────────────────────────────────── */
+
+mark.span-cause {
+  background: #fff3cd;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+mark.span-effect {
+  background: #d1ecf1;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.span-toggle-row {
+  padding: 6px 0 8px;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 4px;
 }
 
 /* ── Filter bar ──────────────────────────────────────────────────────── */
