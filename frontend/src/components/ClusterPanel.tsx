@@ -76,7 +76,10 @@ export function ClusterPanel({ clusterId, onExpandRequest }: ClusterPanelProps) 
               className="subcluster-item"
               onClick={() => onExpandRequest(c.id, c.level)}
             >
-              <span className="subcluster-title">→ {c.label}</span>
+              <span className="subcluster-chevron" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="7 4 13 10 7 16" /></svg>
+              </span>
+              <span className="subcluster-title">{c.label}</span>
               <span className="subcluster-count">({c.member_count.toLocaleString()})</span>
             </div>
           ))}

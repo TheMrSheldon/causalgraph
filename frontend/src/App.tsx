@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CausalGraph } from './components/CausalGraph'
 import { ClusterPanel } from './components/ClusterPanel'
 import { FilterBar } from './components/FilterBar'
@@ -13,6 +13,23 @@ export default function App() {
   const [minPostCount, setMinPostCount] = useState(1)
   const [selectedCluster, setSelectedCluster] = useState<number | null>(null)
   const [selectedEdge, setSelectedEdge] = useState<SelectedEdge | null>(null)
+  const [sidebarWidth, setSidebarWidth] = useState(340)
+  const dragState = useRef<{ startX: number; startWidth: number } | null>(null)
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!dragState.current) return
+      const delta = dragState.current.startX - e.clientX
+      setSidebarWidth(Math.max(200, Math.min(700, dragState.current.startWidth + delta)))
+    }
+    const onMouseUp = () => { dragState.current = null }
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [])
 
   const { data: graphData, isLoading } = useGraph(level, minPostCount)
   const { expandCluster, collapseCluster, isExpanded, getExpandedData } = useClusterExpand()
@@ -78,7 +95,7 @@ export default function App() {
   )
 
   return (
-    <div className="app-layout">
+    <div className="app-layout" style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}>
       <header className="app-header">
         <a className="app-header-brand" href="https://webis.de/" target="_blank" rel="noopener noreferrer">
           <img src="/webis-logo.png" alt="Webis" />
@@ -116,6 +133,13 @@ export default function App() {
       </main>
 
       <aside className="sidebar">
+        <div
+          className="sidebar-resize-handle"
+          onMouseDown={(e) => {
+            dragState.current = { startX: e.clientX, startWidth: sidebarWidth }
+            e.preventDefault()
+          }}
+        />
         <ClusterPanel
           clusterId={selectedCluster}
           onExpandRequest={handleExpandRequest}

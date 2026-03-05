@@ -1,7 +1,7 @@
 import cytoscape, { type ElementDefinition, type StylesheetStyle } from 'cytoscape'
 // @ts-expect-error – no types for fcose
 import fcose from 'cytoscape-fcose'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ClusterNode, GraphEdge, SelectedEdge } from '../types'
 
 cytoscape.use(fcose)
@@ -129,7 +129,7 @@ const CYTOSCAPE_STYLE: StylesheetStyle[] = [
       'line-color': '#1e87f0',
       'target-arrow-color': '#1e87f0',
       opacity: 1,
-      width: 3,
+      width: 'mapData(post_count, 1, 500, 2, 14)',
     },
   },
   {
@@ -139,7 +139,7 @@ const CYTOSCAPE_STYLE: StylesheetStyle[] = [
       'line-color': '#faa05a',
       'target-arrow-color': '#faa05a',
       opacity: 1,
-      width: 3,
+      width: 'mapData(post_count, 1, 500, 2, 14)',
     },
   },
   {
@@ -241,6 +241,9 @@ export function CausalGraph({
 }: CausalGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<cytoscape.Core | null>(null)
+  const [contextMenu, setContextMenu] = useState<{
+    x: number; y: number; clusterId: number; level: number
+  } | null>(null)
 
   // Initialize Cytoscape once
   useEffect(() => {
@@ -275,8 +278,11 @@ export function CausalGraph({
     })
 
     cy.on('cxttap', 'node', (evt) => {
+      evt.originalEvent.preventDefault()
       const id = parseInt(evt.target.id().replace('cluster-', ''), 10)
-      onNodeRightClick(id)
+      const level = evt.target.data('level') as number
+      const { clientX, clientY } = evt.originalEvent as MouseEvent
+      setContextMenu({ x: clientX, y: clientY, clusterId: id, level })
     })
 
     cy.on('tap', 'node', (evt) => {
@@ -331,9 +337,56 @@ export function CausalGraph({
     cy.layout(FCOSE_LAYOUT).run()
   }, [nodes, edges, expandedNodes, childNodesByParent, childEdgesByParent])
 
+  // Dismiss context menu on outside click
+  useEffect(() => {
+    if (!contextMenu) return
+    const dismiss = () => setContextMenu(null)
+    document.addEventListener('click', dismiss)
+    document.addEventListener('contextmenu', dismiss)
+    return () => {
+      document.removeEventListener('click', dismiss)
+      document.removeEventListener('contextmenu', dismiss)
+    }
+  }, [contextMenu])
+
+  const isExpanded = expandedNodes.has(contextMenu?.clusterId ?? -1)
+  const canExpand = (contextMenu?.level ?? 0) > 0 && !isExpanded
+  const canCollapse = isExpanded
+
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+
+      {contextMenu && (
+        <div
+          className="node-context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {canExpand && (
+            <button className="node-context-item" onClick={() => {
+              onNodeDblClick(contextMenu.clusterId, contextMenu.level)
+              setContextMenu(null)
+            }}>
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="7 4 13 10 7 16"/></svg>
+              Expand sub-clusters
+            </button>
+          )}
+          {canCollapse && (
+            <button className="node-context-item" onClick={() => {
+              onNodeRightClick(contextMenu.clusterId)
+              setContextMenu(null)
+            }}>
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="13 4 7 10 13 16"/></svg>
+              Collapse sub-clusters
+            </button>
+          )}
+          {!canExpand && !canCollapse && (
+            <span className="node-context-empty">No actions available</span>
+          )}
+        </div>
+      )}
+
       <div className="graph-legend">
         <div className="graph-legend-item">
           <span className="graph-legend-dot" style={{ background: LEVEL_COLORS[2] }} />
@@ -349,7 +402,7 @@ export function CausalGraph({
         </div>
         <div className="graph-legend-hint">
           Double-click to expand<br />
-          Right-click to collapse<br />
+          Right-click for menu<br />
           Click edge for posts
         </div>
       </div>
