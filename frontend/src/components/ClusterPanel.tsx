@@ -6,6 +6,12 @@ interface ClusterPanelProps {
   onExpandRequest: (clusterId: number, level: number) => void
 }
 
+const LEVEL_META = [
+  { label: 'Leaf', cls: 'wlabel wlabel-success' },
+  { label: 'Mid',  cls: 'wlabel wlabel-warning'  },
+  { label: 'Top',  cls: 'wlabel'                 },
+] as const
+
 function PostItem({ post }: { post: PostSummary }) {
   const date = new Date(post.created_utc * 1000).toLocaleDateString()
   const href = post.permalink
@@ -15,13 +21,9 @@ function PostItem({ post }: { post: PostSummary }) {
   return (
     <div className="post-item">
       <p className="post-title">
-        <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: '#93c5fd', textDecoration: 'none' }}>
-          {post.title}
-        </a>
+        {post.title}{' '}[<a className="res-link" href={href} target="_blank" rel="noopener noreferrer">reddit</a>]
       </p>
-      <span className="post-meta">
-        ↑ {post.score} · {post.num_comments} comments · {date}
-      </span>
+      <span className="post-meta">↑ {post.score} · {post.num_comments} comments · {date}</span>
     </div>
   )
 }
@@ -33,7 +35,7 @@ export function ClusterPanel({ clusterId, onExpandRequest }: ClusterPanelProps) 
     return (
       <div className="cluster-panel">
         <p className="hint">Click a node to see details.</p>
-        <p className="hint">Double-click to expand. Right-click to collapse.</p>
+        <p className="hint">Double-click to expand / right-click to collapse.</p>
       </div>
     )
   }
@@ -42,16 +44,19 @@ export function ClusterPanel({ clusterId, onExpandRequest }: ClusterPanelProps) 
     return <div className="loading">Loading cluster…</div>
   }
 
+  const levelMeta = LEVEL_META[data.cluster.level] ?? { label: `L${data.cluster.level}`, cls: 'wlabel wlabel-muted' }
+
   return (
     <div className="cluster-panel">
       <h2>{data.cluster.label}</h2>
-      <p className="post-meta" style={{ marginBottom: 8 }}>
-        Level {data.cluster.level} · {data.cluster.member_count} events
+      <p className="cluster-panel-meta">
+        <span className={levelMeta.cls}>{levelMeta.label}</span>
+        {data.cluster.member_count.toLocaleString()} events
       </p>
 
       {data.top_events.length > 0 && (
         <>
-          <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>Top events:</div>
+          <div className="cluster-section-label">Top events</div>
           <div className="tag-list">
             {data.top_events.slice(0, 12).map((e) => (
               <span key={e} className="tag">{e}</span>
@@ -62,21 +67,17 @@ export function ClusterPanel({ clusterId, onExpandRequest }: ClusterPanelProps) 
 
       {data.children.length > 0 && (
         <>
-          <div style={{ fontSize: 11, color: '#94a3b8', margin: '8px 0 4px' }}>
-            Sub-clusters ({data.children.length}):
+          <div className="cluster-section-label">
+            Sub-clusters ({data.children.length})
           </div>
           {data.children.slice(0, 6).map((c) => (
             <div
               key={c.id}
+              className="subcluster-item"
               onClick={() => onExpandRequest(c.id, c.level)}
-              style={{
-                cursor: 'pointer',
-                fontSize: 12,
-                color: '#a78bfa',
-                padding: '2px 0',
-              }}
             >
-              → {c.label} ({c.member_count})
+              <span className="subcluster-title">→ {c.label}</span>
+              <span className="subcluster-count">({c.member_count.toLocaleString()})</span>
             </div>
           ))}
         </>
@@ -84,7 +85,7 @@ export function ClusterPanel({ clusterId, onExpandRequest }: ClusterPanelProps) 
 
       {data.posts.length > 0 && (
         <>
-          <div style={{ fontSize: 11, color: '#94a3b8', margin: '12px 0 4px' }}>Sample posts:</div>
+          <div className="cluster-section-label">Sample posts</div>
           {data.posts.map((p) => <PostItem key={p.id} post={p} />)}
         </>
       )}

@@ -13,31 +13,16 @@ export function PostList({ edge, onClose }: PostListProps) {
 
   return (
     <div className="post-drawer">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <h3>
-          Posts: cluster {edge.source_cluster_id} → cluster {edge.target_cluster_id}
-        </h3>
-        <button
-          onClick={onClose}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: '#94a3b8',
-            cursor: 'pointer',
-            fontSize: 18,
-          }}
-        >
-          ✕
-        </button>
+      <div className="post-drawer-header">
+        <h3>Posts: cluster {edge.source_cluster_id} → cluster {edge.target_cluster_id}</h3>
+        <button className="drawer-close" onClick={onClose} title="Close">✕</button>
       </div>
 
       {isLoading && <div className="loading">Loading posts…</div>}
 
       {data && (
         <>
-          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
-            {data.total} posts found
-          </div>
+          <div className="post-drawer-count">{data.total.toLocaleString()} posts found</div>
           {data.posts.map((post) => {
             const href = post.permalink
               ? `https://reddit.com${post.permalink}`
@@ -45,13 +30,9 @@ export function PostList({ edge, onClose }: PostListProps) {
             return (
               <div key={post.id} className="post-item">
                 <p className="post-title">
-                  <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: '#93c5fd', textDecoration: 'none' }}>
-                    {post.title}
-                  </a>
+                  {post.title}{' '}[<a className="res-link" href={href} target="_blank" rel="noopener noreferrer">reddit</a>]
                 </p>
-                <span className="post-meta">
-                  ↑ {post.score} · {post.num_comments} comments
-                </span>
+                <span className="post-meta">↑ {post.score} · {post.num_comments} comments</span>
               </div>
             )
           })}
