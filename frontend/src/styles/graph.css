@@ -108,6 +108,181 @@ html, body, #root {
   flex: 1;
 }
 
+.header-icon-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: 3px;
+}
+
+.header-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+/* ── Modal ───────────────────────────────────────────────────────────── */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-panel {
+  background: #fff;
+  border: 1px solid var(--webis-border);
+  border-radius: 4px;
+  box-shadow: var(--webis-shadow-lg);
+  min-width: 320px;
+  max-width: 480px;
+  width: 100%;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--webis-border);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--webis-heading);
+}
+
+.modal-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Settings sections ───────────────────────────────────────────────── */
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-section + .settings-section {
+  padding-top: 14px;
+  border-top: 1px solid var(--webis-border);
+}
+
+.settings-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #888;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.settings-group-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--webis-heading);
+}
+
+/* ── Toggle switch ───────────────────────────────────────────────────── */
+
+.toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  gap: 12px;
+}
+
+.toggle-label {
+  font-size: 12px;
+  color: var(--webis-text);
+}
+
+.toggle-switch {
+  flex-shrink: 0;
+  width: 32px;
+  height: 18px;
+  border-radius: 9px;
+  background: #ccc;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  padding: 0;
+  transition: background 0.15s;
+}
+
+.toggle-on {
+  background: var(--webis-primary);
+}
+
+.toggle-thumb {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  top: 2px;
+  left: 2px;
+  transition: left 0.15s;
+  pointer-events: none;
+}
+
+.toggle-on .toggle-thumb {
+  left: 16px;
+}
+
+/* ── Segmented control ───────────────────────────────────────────────── */
+
+.seg-control {
+  display: inline-flex;
+  border: 1px solid var(--webis-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.seg-btn {
+  background: #fff;
+  border: none;
+  border-right: 1px solid var(--webis-border);
+  padding: 4px 14px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--webis-text);
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.seg-btn:last-child {
+  border-right: none;
+}
+
+.seg-btn:hover:not(.seg-btn-active) {
+  background: var(--webis-muted-bg);
+}
+
+.seg-btn-active {
+  background: var(--webis-primary);
+  color: #fff;
+}
+
 /* ── Graph canvas ────────────────────────────────────────────────────── */
 
 .graph-container {
@@ -170,6 +345,20 @@ html, body, #root {
 .wlabel-danger  { background: var(--webis-danger); }
 .wlabel-muted   { background: #e5e5e5; color: #666; }
 
+/* ── Internal navigation link (wavy underline, no external indicator) ── */
+
+.internal-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--webis-link);
+  text-decoration: underline wavy var(--webis-link);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
 /* ── Resource link (bracket-style, publications convention) ──────────── */
 /* Usage: [<a class="res-link" href="...">reddit</a>]                     */
 
@@ -182,7 +371,6 @@ html, body, #root {
 
 .res-link:hover {
   text-decoration: underline;
-  color: var(--webis-primary);
 }
 
 /* ── Cluster panel ───────────────────────────────────────────────────── */
@@ -296,40 +484,25 @@ html, body, #root {
   flex-wrap: wrap;
 }
 
-/* ── Post drawer (edge-click) ────────────────────────────────────────── */
+/* ── Edge panel (sidebar, replaces drawer) ───────────────────────────── */
 
-.post-drawer {
-  position: fixed;
-  bottom: var(--footer-height);
-  left: 0;
-  right: var(--sidebar-width);
-  max-height: 38vh;
+.edge-panel {
   background: #fff;
-  border-top: 3px solid var(--webis-primary);
-  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.2);
-  overflow-y: auto;
-  padding: 14px 18px;
-  z-index: 100;
 }
 
-.post-drawer-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.post-drawer h3 {
-  margin: 0;
-  font-size: 13px;
+.edge-panel h2 {
+  margin: 0 0 6px 0;
+  font-size: 15px;
   font-weight: 600;
   color: var(--webis-heading);
+  line-height: 1.3;
 }
 
-.post-drawer-count {
-  font-size: 11px;
-  color: #888;
-  margin-bottom: 8px;
+.edge-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
 }
 
 .drawer-close {

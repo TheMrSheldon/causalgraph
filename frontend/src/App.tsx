@@ -3,10 +3,11 @@ import { CausalGraph } from './components/CausalGraph'
 import { ClusterPanel } from './components/ClusterPanel'
 import { FilterBar } from './components/FilterBar'
 import { PostList } from './components/PostList'
+import { SettingsModal } from './components/SettingsModal'
 import { useClusterExpand } from './hooks/useClusterExpand'
 import { useGraph } from './hooks/useGraph'
 import './styles/graph.css'
-import type { SelectedEdge } from './types'
+import type { GraphSettings, SelectedEdge } from './types'
 
 export default function App() {
   const [level, setLevel] = useState(2)
@@ -15,6 +16,19 @@ export default function App() {
   const [selectedEdge, setSelectedEdge] = useState<SelectedEdge | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(340)
   const dragState = useRef<{ startX: number; startWidth: number } | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settings, setSettings] = useState<GraphSettings>({
+    clusterSizeMode: 'no',
+    linkSizeMode: 'size',
+    showEdgeLabels: false,
+    showMemberCount: false,
+    dimOnSelection: true,
+    highlightOnHover: false,
+    nodeSpacing: 'normal',
+    animateLayout: true,
+    showArrows: true,
+    showLegend: true,
+  })
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
@@ -57,6 +71,15 @@ export default function App() {
     [isExpanded]
   )
 
+  const clusterLabels = useMemo(() => {
+    const map = new Map<number, string>()
+    for (const node of graphData?.nodes ?? []) map.set(node.id, node.label)
+    for (const nodes of childNodesByParent.values()) {
+      for (const node of nodes) map.set(node.id, node.label)
+    }
+    return map
+  }, [graphData, childNodesByParent])
+
   const handleNodeDblClick = useCallback(
     (clusterId: number, level: number) => {
       if (level > 0) {
@@ -94,6 +117,11 @@ export default function App() {
     [expandCluster]
   )
 
+  const handleClusterClick = useCallback((clusterId: number) => {
+    setSelectedCluster(clusterId)
+    setSelectedEdge(null)
+  }, [])
+
   return (
     <div className="app-layout" style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}>
       <header className="app-header">
@@ -111,7 +139,24 @@ export default function App() {
           onMinPostCountChange={setMinPostCount}
         />
         {isLoading && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Loading…</span>}
+        <button className="header-icon-btn" onClick={() => setSettingsOpen(true)} title="Settings">
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <line x1="3" y1="5" x2="17" y2="5"/>
+            <line x1="3" y1="10" x2="17" y2="10"/>
+            <line x1="3" y1="15" x2="17" y2="15"/>
+            <circle cx="7" cy="5" r="2" fill="currentColor" stroke="none"/>
+            <circle cx="13" cy="10" r="2" fill="currentColor" stroke="none"/>
+            <circle cx="7" cy="15" r="2" fill="currentColor" stroke="none"/>
+          </svg>
+        </button>
       </header>
+
+      <SettingsModal
+        open={settingsOpen}
+        settings={settings}
+        onSettingsChange={setSettings}
+        onClose={() => setSettingsOpen(false)}
+      />
 
       <main className="graph-container">
         {graphData && (
@@ -121,14 +166,12 @@ export default function App() {
             expandedNodes={expandedNodes}
             childNodesByParent={childNodesByParent}
             childEdgesByParent={childEdgesByParent}
+            settings={settings}
             onNodeDblClick={handleNodeDblClick}
             onNodeRightClick={handleNodeRightClick}
             onNodeClick={handleNodeClick}
             onEdgeClick={handleEdgeClick}
           />
-        )}
-        {selectedEdge && (
-          <PostList edge={selectedEdge} onClose={() => setSelectedEdge(null)} />
         )}
       </main>
 
@@ -140,10 +183,16 @@ export default function App() {
             e.preventDefault()
           }}
         />
-        <ClusterPanel
-          clusterId={selectedCluster}
-          onExpandRequest={handleExpandRequest}
-        />
+        {selectedEdge
+          ? <PostList
+              edge={selectedEdge}
+              onClose={() => setSelectedEdge(null)}
+              sourceLabel={clusterLabels.get(selectedEdge.source_cluster_id)}
+              targetLabel={clusterLabels.get(selectedEdge.target_cluster_id)}
+              onClusterClick={handleClusterClick}
+            />
+          : <ClusterPanel clusterId={selectedCluster} onExpandRequest={handleExpandRequest} />
+        }
       </aside>
 
       <footer className="app-footer">

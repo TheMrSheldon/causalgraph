@@ -57,3 +57,19 @@ export interface SelectedEdge {
   source_cluster_id: number;
   target_cluster_id: number;
 }
+
+export type VisualizationMode = 'no' | 'opacity' | 'size'
+export type NodeSpacing = 'tight' | 'normal' | 'spread'
+
+export interface GraphSettings {
+  clusterSizeMode: VisualizationMode
+  linkSizeMode: VisualizationMode
+  showEdgeLabels: boolean
+  showMemberCount: boolean
+  dimOnSelection: boolean
+  highlightOnHover: boolean
+  nodeSpacing: NodeSpacing
+  animateLayout: boolean
+  showArrows: boolean
+  showLegend: boolean
+}

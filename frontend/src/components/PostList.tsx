@@ -4,25 +4,37 @@ import type { SelectedEdge } from '../types'
 interface PostListProps {
   edge: SelectedEdge | null
   onClose: () => void
+  sourceLabel?: string
+  targetLabel?: string
+  onClusterClick: (clusterId: number) => void
 }
 
-export function PostList({ edge, onClose }: PostListProps) {
+export function PostList({ edge, onClose, sourceLabel, targetLabel, onClusterClick }: PostListProps) {
   const { data, isLoading } = usePostsForEdge(edge)
 
   if (!edge) return null
 
   return (
-    <div className="post-drawer">
-      <div className="post-drawer-header">
-        <h3>Posts: cluster {edge.source_cluster_id} → cluster {edge.target_cluster_id}</h3>
+    <div className="edge-panel">
+      <div className="edge-panel-header">
+        <h2>Edge posts</h2>
         <button className="drawer-close" onClick={onClose} title="Close">✕</button>
       </div>
+      <p className="cluster-panel-meta">
+        <button className="internal-link" onClick={() => { onClose(); onClusterClick(edge.source_cluster_id) }}>
+          {sourceLabel ?? `Cluster ${edge.source_cluster_id}`}
+        </button>
+        {' → '}
+        <button className="internal-link" onClick={() => { onClose(); onClusterClick(edge.target_cluster_id) }}>
+          {targetLabel ?? `Cluster ${edge.target_cluster_id}`}
+        </button>
+      </p>
 
       {isLoading && <div className="loading">Loading posts…</div>}
 
       {data && (
         <>
-          <div className="post-drawer-count">{data.total.toLocaleString()} posts found</div>
+          <div className="cluster-section-label">{data.total.toLocaleString()} posts</div>
           {data.posts.map((post) => {
             const href = post.permalink
               ? `https://reddit.com${post.permalink}`
