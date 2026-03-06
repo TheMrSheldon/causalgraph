@@ -32,6 +32,12 @@ class CausalRelation:
     """
     One extracted (cause, effect) pair tied to its source post.
     confidence=1.0 for deterministic (rule-based) extractors.
+    is_countercausal=True when the title explicitly negates the causal claim
+    (e.g. "X does not cause Y", "no link between X and Y").
+
+    p_none / p_causal / p_countercausal: per-label probabilities (or
+    pseudo-probabilities for rule-based extractors). These are NOT persisted
+    to the database; they are populated at inference / analysis time only.
     """
     post_id: str
     cause_text: str
@@ -40,6 +46,11 @@ class CausalRelation:
     effect_norm: str
     confidence: float = 1.0
     extractor: str = ""
+    is_countercausal: bool = False
+    # Per-label prediction certainty (not stored in DB)
+    p_none: float = 0.0
+    p_causal: float = 0.0
+    p_countercausal: float = 0.0
 
 
 @dataclass

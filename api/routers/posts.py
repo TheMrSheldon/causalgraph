@@ -36,6 +36,7 @@ def get_posts_for_edge(
                 permalink=p["permalink"],
                 cause_text=p.get("cause_text"),
                 effect_text=p.get("effect_text"),
+                is_countercausal=bool(p.get("is_countercausal", 0)),
             )
             for p in posts_raw
         ],
@@ -61,4 +62,5 @@ def get_post(post_id: str, db: Database = Depends(get_db)) -> PostDetail:
         cause_text=row.get("cause_text"),
         effect_text=row.get("effect_text"),
         confidence=row.get("confidence"),
+        is_countercausal=bool(row.get("is_countercausal", 0)),
     )

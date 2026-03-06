@@ -90,6 +90,7 @@ def expand_cluster(
                 relation_count=e["relation_count"],
                 post_count=e["post_count"],
                 avg_score=round(e["avg_score"] or 0.0, 1),
+                countercausal_count=e.get("countercausal_count", 0),
             )
             for e in raw_edges
             if e["source_cluster_id"] != e["target_cluster_id"]

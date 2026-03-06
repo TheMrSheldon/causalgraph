@@ -856,15 +856,13 @@ mark.span-effect {
   background: #1070d0;
 }
 
-.sankey-note,
-.analyzer-mock-note {
+.sankey-note {
   font-size: 11px;
   color: #aaa;
   margin-bottom: 10px;
 }
 
-.sankey-note code,
-.analyzer-mock-note code {
+.sankey-note code {
   font-family: monospace;
   font-size: 11px;
   background: #f0f0f0;
@@ -891,19 +889,9 @@ mark.span-effect {
 .analyzer-screen {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto 1fr;
   height: 100%;
   overflow: hidden;
-}
-
-.analyzer-pane {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border-right: 1px solid var(--webis-border);
-}
-
-.analyzer-pane:last-child {
-  border-right: none;
 }
 
 .analyzer-pane-header {
@@ -913,8 +901,11 @@ mark.span-effect {
   padding: 10px 16px;
   border-bottom: 1px solid var(--webis-border);
   background: var(--webis-muted-bg);
-  flex-shrink: 0;
   gap: 10px;
+}
+
+.analyzer-pane-header--input {
+  border-right: 1px solid var(--webis-border);
 }
 
 .analyzer-pane-title {
@@ -932,6 +923,9 @@ mark.span-effect {
 
 .analyzer-textarea {
   flex: 1;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
   border: none;
   outline: none;
   padding: 14px 16px;
@@ -943,9 +937,17 @@ mark.span-effect {
   background: #fff;
 }
 
-.analyzer-pane--result {
-  overflow-y: auto;
+.analyzer-pane-body {
   padding: 14px 16px;
+  overflow-y: auto;
+}
+
+.analyzer-pane-body--input {
+  padding: 0;
+  border-right: 1px solid var(--webis-border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .analyzer-highlighted-text {
@@ -956,20 +958,6 @@ mark.span-effect {
   border-radius: 3px;
   padding: 10px 12px;
   white-space: pre-wrap;
-}
-
-.analyzer-legend {
-  display: flex;
-  gap: 12px;
-  margin-top: 8px;
-  font-size: 11px;
-  color: #666;
-}
-
-.analyzer-legend-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 
 .analyzer-relation {
@@ -1011,6 +999,19 @@ mark.span-effect {
   font-size: 11px;
 }
 
+.countercausal-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #fee2e2;
+  color: #b91c1c;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
 .analyzer-btn-primary {
   background: var(--webis-primary);
   color: #fff;
@@ -1045,4 +1046,59 @@ mark.span-effect {
 
 .analyzer-btn-secondary:hover {
   background: #efefef;
+}
+
+/* ── Probability hover tooltip ───────────────────────────────────────── */
+
+.analyzer-hover-hint {
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 400;
+  color: #aaa;
+  letter-spacing: 0.01em;
+}
+
+.prob-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  margin-top: 4px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.prob-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prob-label {
+  width: 62px;
+  flex-shrink: 0;
+  color: #555;
+}
+
+.prob-track {
+  flex: 1;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.prob-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.15s ease;
+}
+
+.prob-value {
+  width: 32px;
+  text-align: right;
+  color: #555;
+  flex-shrink: 0;
 }

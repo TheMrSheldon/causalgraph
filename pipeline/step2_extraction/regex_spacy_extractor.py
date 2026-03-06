@@ -98,6 +98,61 @@ _EXTRACTION_PATTERNS: list[tuple[re.Pattern, str, str]] = [
     ),
 ]
 
+# Countercausal patterns: same groups as above but the causal claim is negated.
+# Checked BEFORE _EXTRACTION_PATTERNS so negation takes priority.
+_NEGATION_PATTERNS: list[tuple[re.Pattern, str, str]] = [
+    # "X does not / doesn't / fails to cause / lead to / result in Y"
+    (
+        re.compile(
+            r"^(?P<cause>.+?)\s+(?:does?\s+not|doesn'?t|cannot|can'?t|fail(?:s)?\s+to|never)\s+"
+            r"(?:lead\s+to|result\s+in|cause|trigger|produce|drive)\s+(?P<effect>.+)$",
+            re.IGNORECASE,
+        ),
+        "cause",
+        "effect",
+    ),
+    # "X does not increase / reduce / improve Y"
+    (
+        re.compile(
+            r"^(?P<cause>.+?)\s+(?:does?\s+not|doesn'?t|cannot|can'?t|fail(?:s)?\s+to)\s+"
+            r"(?:increase|decrease|reduce|boost|lower|raise|improve|worsen|prevent|inhibit|promote)\s+(?P<effect>.+)$",
+            re.IGNORECASE,
+        ),
+        "cause",
+        "effect",
+    ),
+    # "X is not linked to / associated with Y"
+    (
+        re.compile(
+            r"^(?P<cause>.+?)\s+(?:is|are)\s+not\s+"
+            r"(?:linked\s+to|associated\s+with|correlated\s+with|connected\s+to|tied\s+to)\s+(?P<effect>.+)$",
+            re.IGNORECASE,
+        ),
+        "cause",
+        "effect",
+    ),
+    # "No link / evidence / association between X and Y"
+    (
+        re.compile(
+            r"^(?:.{0,40}?\s+)?no\s+(?:significant\s+)?(?:evidence|link|association|connection|relationship)\s+"
+            r"(?:between\s+|that\s+|for\s+)?(?P<cause>.+?)\s+(?:and|to|with)\s+(?P<effect>.+)$",
+            re.IGNORECASE,
+        ),
+        "cause",
+        "effect",
+    ),
+    # "Study finds no link / no evidence that X causes Y"
+    (
+        re.compile(
+            r"^.{0,60}(?:finds?\s+no|shows?\s+no|found\s+no|reveals?\s+no)\s+"
+            r"(?:evidence|link|association)\s+(?:between\s+|that\s+)?(?P<cause>.+?)\s+(?:and|to|causes?|increases?|reduces?)\s+(?P<effect>.+)$",
+            re.IGNORECASE,
+        ),
+        "cause",
+        "effect",
+    ),
+]
+
 
 def _clean_phrase(text: str) -> str:
     """Strip trailing punctuation and common filler words."""
@@ -143,6 +198,20 @@ def _extract_with_spacy(title: str, nlp) -> list[tuple[str, str]] | None:
     return None
 
 
+def _label_probs(is_countercausal: bool, source: str) -> dict:
+    """
+    Return pseudo-probability scores for each label.
+    Rule-based matches use hard pseudo-probabilities reflecting certainty;
+    the spaCy fallback is slightly softer.
+    """
+    if source == "negation":
+        return {"p_none": 0.0, "p_causal": 0.0, "p_countercausal": 1.0}
+    if source == "regex":
+        return {"p_none": 0.0, "p_causal": 1.0, "p_countercausal": 0.0}
+    # spaCy dependency parse fallback — slightly less certain
+    return {"p_none": 0.15, "p_causal": 0.80, "p_countercausal": 0.05}
+
+
 class RegexSpacyExtractor:
     """
     Implements CausalExtractor using regex pattern matching with an optional
@@ -169,17 +238,28 @@ class RegexSpacyExtractor:
 
     def extract(self, post: Post) -> list[CausalRelation]:
         title = post.title
-        pairs: list[tuple[str, str]] = []
+        pairs: list[tuple[str, str, bool, str]] = []  # (cause, effect, is_cc, source)
 
-        # Try each regex pattern in order; take first match
-        for pattern, cause_group, effect_group in _EXTRACTION_PATTERNS:
+        # Check negation patterns first (take priority)
+        for pattern, cause_group, effect_group in _NEGATION_PATTERNS:
             m = pattern.match(title)
             if m:
                 cause = _clean_phrase(m.group(cause_group))
                 effect = _clean_phrase(m.group(effect_group))
                 if cause and effect and cause != effect:
-                    pairs.append((cause, effect))
-                    break  # One match per title is sufficient for the regex pass
+                    pairs.append((cause, effect, True, "negation"))
+                    break
+
+        # Try each causal pattern in order; take first match
+        if not pairs:
+            for pattern, cause_group, effect_group in _EXTRACTION_PATTERNS:
+                m = pattern.match(title)
+                if m:
+                    cause = _clean_phrase(m.group(cause_group))
+                    effect = _clean_phrase(m.group(effect_group))
+                    if cause and effect and cause != effect:
+                        pairs.append((cause, effect, False, "regex"))
+                        break
 
         # If regex failed, try spaCy dependency parse
         if not pairs:
@@ -187,7 +267,7 @@ class RegexSpacyExtractor:
             if nlp:
                 spacy_pairs = _extract_with_spacy(title, nlp)
                 if spacy_pairs:
-                    pairs.extend(spacy_pairs)
+                    pairs.extend((c, e, False, "spacy") for c, e in spacy_pairs)
 
         return [
             CausalRelation(
@@ -198,7 +278,9 @@ class RegexSpacyExtractor:
                 effect_norm=_normalize(effect),
                 confidence=1.0,
                 extractor=self.name,
+                is_countercausal=is_cc,
+                **_label_probs(is_cc, source),
             )
-            for cause, effect in pairs
+            for cause, effect, is_cc, source in pairs
             if cause and effect
         ]

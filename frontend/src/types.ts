@@ -12,6 +12,7 @@ export interface GraphEdge {
   relation_count: number;
   post_count: number;
   avg_score: number;
+  countercausal_count: number;
 }
 
 export interface GraphData {
@@ -51,6 +52,7 @@ export interface PaginatedPosts {
 export interface EdgePostSummary extends PostSummary {
   cause_text: string | null;
   effect_text: string | null;
+  is_countercausal: boolean;
 }
 
 export interface PaginatedEdgePosts {
@@ -92,25 +94,30 @@ export interface PathsResponse {
 
 // --- Text Analyzer -----------------------------------------------------
 
-export interface AnalysisSpan {
+/** A unique event identified in the text, with its span position. */
+export interface AnalysisEvent {
+  index: number        // palette index; same event text → same color
+  span_text: string    // text as it appears in the original document
+  description: string  // cleaned event phrase (may differ for LLM extractors)
   start: number
   end: number
-  type: 'cause' | 'effect'
 }
 
+/** One causal or countercausal relationship with per-label certainty scores. */
 export interface AnalysisRelation {
+  cause_event_index: number
+  effect_event_index: number
   cause_text: string
   effect_text: string
-  cause_cluster_id: number | null
-  cause_cluster_label: string | null
-  effect_cluster_id: number | null
-  effect_cluster_label: string | null
-  corpus_post_count: number
+  is_countercausal: boolean
+  p_none: number
+  p_causal: number
+  p_countercausal: number
 }
 
 export interface AnalysisResponse {
   text: string
-  spans: AnalysisSpan[]
+  events: AnalysisEvent[]
   relations: AnalysisRelation[]
 }
 

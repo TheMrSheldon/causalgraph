@@ -58,6 +58,7 @@ function EdgePostItem({ post, showSpans }: { post: EdgePostSummary; showSpans: b
           ? highlightSpans(post.title, post.cause_text, post.effect_text)
           : post.title}
         {' '}[<a className="res-link" href={href} target="_blank" rel="noopener noreferrer">reddit</a>]
+        {post.is_countercausal && <span className="countercausal-badge">refuted</span>}
       </p>
       <span className="post-meta">↑ {post.score} · {post.num_comments} comments</span>
     </div>

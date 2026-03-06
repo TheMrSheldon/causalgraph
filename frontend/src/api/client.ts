@@ -1,7 +1,6 @@
 import axios from 'axios'
 import type {
   AnalysisResponse,
-  AnalysisSpan,
   ClusterDetail,
   GraphData,
   LevelCounts,
@@ -32,36 +31,6 @@ function mockPaths(causeQuery: string, effectQuery: string): PathsResponse {
   }
 }
 
-const CAUSAL_VERB_RE =
-  /\b(causes?|leads?\s+to|results?\s+in|increases?|reduces?|improves?|decreases?|boosts?|prevents?|promotes?|triggers?)\b/gi
-
-function mockAnalyze(text: string): AnalysisResponse {
-  const spans: AnalysisSpan[] = []
-  const relations: AnalysisResponse['relations'] = []
-  const re = new RegExp(CAUSAL_VERB_RE.source, 'gi')
-  let m: RegExpExecArray | null
-  while ((m = re.exec(text)) !== null) {
-    const verbIdx = m.index
-    const verbEnd = verbIdx + m[0].length
-    // cause = text since last period/start of string
-    const sentStart = Math.max(0, text.lastIndexOf('.', verbIdx - 1) + 1)
-    const causeText = text.slice(sentStart, verbIdx).replace(/^\s+/, '')
-    // effect = text until next punctuation/end
-    const rest = text.slice(verbEnd).replace(/^\s+/, '')
-    const effMatch = rest.match(/^([^.,;]+)/)
-    const effectText = effMatch ? effMatch[1].trim() : ''
-    if (!causeText || !effectText) continue
-    const causeStart = text.indexOf(causeText, sentStart)
-    if (causeStart !== -1) spans.push({ start: causeStart, end: causeStart + causeText.length, type: 'cause' })
-    const effStart = verbEnd + (text.slice(verbEnd).length - rest.length)
-    spans.push({ start: effStart, end: effStart + effectText.length, type: 'effect' })
-    relations.push({ cause_text: causeText, effect_text: effectText,
-      cause_cluster_id: null, cause_cluster_label: null,
-      effect_cluster_id: null, effect_cluster_label: null,
-      corpus_post_count: 0 })
-  }
-  return { text, spans, relations }
-}
 
 const http = axios.create({ baseURL: '/api' })
 
@@ -129,8 +98,8 @@ export const api = {
     return mockPaths(causeQuery, effectQuery)
   },
 
-  // TODO: implement POST /api/analyze  { text: string } → AnalysisResponse
   analyzeText: async (text: string): Promise<AnalysisResponse> => {
-    return mockAnalyze(text)
+    const { data } = await http.post<AnalysisResponse>('/analyze', { text })
+    return data
   },
 }

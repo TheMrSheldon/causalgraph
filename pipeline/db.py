@@ -38,15 +38,16 @@ CREATE INDEX IF NOT EXISTS posts_score_idx   ON posts(score DESC);
 CREATE INDEX IF NOT EXISTS posts_created_idx ON posts(created_utc);
 
 CREATE TABLE IF NOT EXISTS causal_relations (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    post_id       TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-    cause_text    TEXT NOT NULL,
-    effect_text   TEXT NOT NULL,
-    cause_norm    TEXT NOT NULL,
-    effect_norm   TEXT NOT NULL,
-    confidence    REAL NOT NULL DEFAULT 1.0,
-    extractor     TEXT NOT NULL DEFAULT '',
-    extracted_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id           TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    cause_text        TEXT NOT NULL,
+    effect_text       TEXT NOT NULL,
+    cause_norm        TEXT NOT NULL,
+    effect_norm       TEXT NOT NULL,
+    confidence        REAL NOT NULL DEFAULT 1.0,
+    extractor         TEXT NOT NULL DEFAULT '',
+    is_countercausal  INTEGER NOT NULL DEFAULT 0,
+    extracted_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS relations_post_idx    ON causal_relations(post_id);
@@ -92,11 +93,12 @@ CREATE TABLE IF NOT EXISTS pipeline_runs (
 
 -- Materialized leaf-level edges (populated by rebuild_leaf_edges())
 CREATE TABLE IF NOT EXISTS leaf_edges (
-    source_cluster_id  INTEGER NOT NULL,
-    target_cluster_id  INTEGER NOT NULL,
-    relation_count     INTEGER NOT NULL DEFAULT 0,
-    post_count         INTEGER NOT NULL DEFAULT 0,
-    avg_score          REAL NOT NULL DEFAULT 0,
+    source_cluster_id   INTEGER NOT NULL,
+    target_cluster_id   INTEGER NOT NULL,
+    relation_count      INTEGER NOT NULL DEFAULT 0,
+    post_count          INTEGER NOT NULL DEFAULT 0,
+    avg_score           REAL NOT NULL DEFAULT 0,
+    countercausal_count INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (source_cluster_id, target_cluster_id)
 );
 CREATE INDEX IF NOT EXISTS leaf_edges_src ON leaf_edges(source_cluster_id);
@@ -106,13 +108,14 @@ CREATE INDEX IF NOT EXISTS leaf_edges_tgt ON leaf_edges(target_cluster_id);
 # SQL to (re)build the leaf_edges table — run once after Step 3
 _REBUILD_LEAF_EDGES_SQL = """
 DELETE FROM leaf_edges;
-INSERT INTO leaf_edges (source_cluster_id, target_cluster_id, relation_count, post_count, avg_score)
+INSERT INTO leaf_edges (source_cluster_id, target_cluster_id, relation_count, post_count, avg_score, countercausal_count)
 SELECT
     cm_cause.cluster_id,
     cm_effect.cluster_id,
     COUNT(DISTINCT cr.id),
     COUNT(DISTINCT cr.post_id),
-    AVG(p.score)
+    AVG(p.score),
+    SUM(CASE WHEN cr.is_countercausal = 1 THEN 1 ELSE 0 END)
 FROM causal_relations cr
 JOIN cluster_members cm_cause
   ON cm_cause.relation_id = cr.id AND cm_cause.role = 'cause'
@@ -145,6 +148,13 @@ class Database:
     def initialize_schema(self) -> None:
         with self._connect() as conn:
             conn.executescript(SCHEMA_SQL)
+            # Migrations for existing databases
+            existing = {r[1] for r in conn.execute("PRAGMA table_info(causal_relations)").fetchall()}
+            if "is_countercausal" not in existing:
+                conn.execute("ALTER TABLE causal_relations ADD COLUMN is_countercausal INTEGER NOT NULL DEFAULT 0")
+            existing_le = {r[1] for r in conn.execute("PRAGMA table_info(leaf_edges)").fetchall()}
+            if "countercausal_count" not in existing_le:
+                conn.execute("ALTER TABLE leaf_edges ADD COLUMN countercausal_count INTEGER NOT NULL DEFAULT 0")
 
     # ------------------------------------------------------------------
     # Posts
@@ -179,8 +189,8 @@ class Database:
             return []
         sql = """
             INSERT INTO causal_relations
-                (post_id, cause_text, effect_text, cause_norm, effect_norm, confidence, extractor)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (post_id, cause_text, effect_text, cause_norm, effect_norm, confidence, extractor, is_countercausal)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
         ids: list[int] = []
         with self._connect() as conn:
@@ -188,6 +198,7 @@ class Database:
                 cur = conn.execute(sql, (
                     r.post_id, r.cause_text, r.effect_text,
                     r.cause_norm, r.effect_norm, r.confidence, r.extractor,
+                    int(r.is_countercausal),
                 ))
                 ids.append(cur.lastrowid)
         return ids
@@ -198,7 +209,8 @@ class Database:
 
     def get_all_relations(self) -> list[CausalRelation]:
         sql = """
-            SELECT post_id, cause_text, effect_text, cause_norm, effect_norm, confidence, extractor
+            SELECT post_id, cause_text, effect_text, cause_norm, effect_norm,
+                   confidence, extractor, is_countercausal
             FROM causal_relations
         """
         with self._connect() as conn:
@@ -212,6 +224,7 @@ class Database:
                 effect_norm=r["effect_norm"],
                 confidence=r["confidence"],
                 extractor=r["extractor"],
+                is_countercausal=bool(r["is_countercausal"]),
             )
             for r in rows
         ]
@@ -395,7 +408,7 @@ class Database:
         with self._connect() as conn:
             if cluster_ids is None:
                 rows = conn.execute(
-                    "SELECT source_cluster_id, target_cluster_id, relation_count, post_count, avg_score FROM leaf_edges WHERE post_count >= ?",
+                    "SELECT source_cluster_id, target_cluster_id, relation_count, post_count, avg_score, countercausal_count FROM leaf_edges WHERE post_count >= ?",
                     [min_post_count],
                 ).fetchall()
                 return [dict(r) for r in rows]
@@ -409,7 +422,7 @@ class Database:
             leaf_ids = list(leaf_to_ancestor.keys())
             placeholders = ",".join("?" * len(leaf_ids))
             rows = conn.execute(
-                f"""SELECT source_cluster_id, target_cluster_id, relation_count, post_count, avg_score
+                f"""SELECT source_cluster_id, target_cluster_id, relation_count, post_count, avg_score, countercausal_count
                     FROM leaf_edges
                     WHERE source_cluster_id IN ({placeholders})
                       AND target_cluster_id IN ({placeholders})""",
@@ -419,18 +432,20 @@ class Database:
             # Aggregate up to ancestor level
             agg: dict[tuple[int, int], dict] = {}
             for r in rows:
-                src_anc = leaf_to_ancestor.get(r[0])
-                tgt_anc = leaf_to_ancestor.get(r[1])
+                src_anc = leaf_to_ancestor.get(r["source_cluster_id"])
+                tgt_anc = leaf_to_ancestor.get(r["target_cluster_id"])
                 if src_anc is None or tgt_anc is None or src_anc == tgt_anc:
                     continue
                 key = (src_anc, tgt_anc)
                 if key not in agg:
                     agg[key] = {"source_cluster_id": src_anc, "target_cluster_id": tgt_anc,
-                                "relation_count": 0, "post_count": 0, "avg_score_sum": 0.0, "n": 0}
-                agg[key]["relation_count"] += r[2]
-                agg[key]["post_count"] += r[3]
-                agg[key]["avg_score_sum"] += (r[4] or 0.0) * r[3]
-                agg[key]["n"] += r[3]
+                                "relation_count": 0, "post_count": 0, "avg_score_sum": 0.0, "n": 0,
+                                "countercausal_count": 0}
+                agg[key]["relation_count"] += r["relation_count"]
+                agg[key]["post_count"] += r["post_count"]
+                agg[key]["avg_score_sum"] += (r["avg_score"] or 0.0) * r["post_count"]
+                agg[key]["n"] += r["post_count"]
+                agg[key]["countercausal_count"] += r["countercausal_count"]
 
             result = []
             for v in agg.values():
@@ -441,6 +456,7 @@ class Database:
                         "relation_count": v["relation_count"],
                         "post_count": v["post_count"],
                         "avg_score": v["avg_score_sum"] / v["n"] if v["n"] > 0 else 0.0,
+                        "countercausal_count": v["countercausal_count"],
                     })
             return result
 
@@ -500,7 +516,7 @@ class Database:
             # One row per post: pick the first matching causal relation (lowest id)
             sql = f"""
                 SELECT p.id, p.title, p.score, p.num_comments, p.created_utc, p.permalink,
-                       cr.cause_text, cr.effect_text
+                       cr.cause_text, cr.effect_text, cr.is_countercausal
                 FROM posts p
                 JOIN (
                     SELECT cr2.post_id, MIN(cr2.id) AS min_cr_id
@@ -533,7 +549,7 @@ class Database:
     def get_post_by_id(self, post_id: str) -> dict | None:
         sql = """
             SELECT p.id, p.title, p.score, p.num_comments, p.created_utc, p.permalink,
-                   cr.cause_text, cr.effect_text, cr.confidence
+                   cr.cause_text, cr.effect_text, cr.confidence, cr.is_countercausal
             FROM posts p
             LEFT JOIN causal_relations cr ON cr.post_id = p.id
             WHERE p.id = ?

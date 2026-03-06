@@ -263,6 +263,7 @@ function toCytoscapeElements(
         post_count: edge.post_count,
         relation_count: edge.relation_count,
         avg_score: edge.avg_score,
+        countercausal_count: edge.countercausal_count ?? 0,
       },
     })
   }

@@ -18,6 +18,7 @@ class GraphEdge(BaseModel):
     relation_count: int
     post_count: int
     avg_score: float
+    countercausal_count: int = 0
 
 
 class GraphResponse(BaseModel):
@@ -43,6 +44,7 @@ class PostDetail(PostSummary):
     cause_text: str | None = None
     effect_text: str | None = None
     confidence: float | None = None
+    is_countercausal: bool = False
 
 
 class ClusterDetail(BaseModel):
@@ -62,6 +64,7 @@ class PaginatedPosts(BaseModel):
 class EdgePostSummary(PostSummary):
     cause_text: str | None = None
     effect_text: str | None = None
+    is_countercausal: bool = False
 
 
 class PaginatedEdgePosts(BaseModel):
@@ -69,3 +72,38 @@ class PaginatedEdgePosts(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# ---------------------------------------------------------------------------
+# Text Analysis endpoint models (POST /api/analyze)
+# ---------------------------------------------------------------------------
+
+class AnalysisRequest(BaseModel):
+    text: str
+
+
+class AnalysisEvent(BaseModel):
+    """A unique event identified in the text, with its span position."""
+    index: int          # palette index; same event text → same index
+    span_text: str      # text as it appears in the original document
+    description: str    # cleaned/extracted event phrase (may differ for LLM extractors)
+    start: int          # character offset in original text
+    end: int            # exclusive
+
+
+class AnalysisRelationItem(BaseModel):
+    """One extracted causal/countercausal relationship between two events."""
+    cause_event_index: int
+    effect_event_index: int
+    cause_text: str
+    effect_text: str
+    is_countercausal: bool
+    p_none: float
+    p_causal: float
+    p_countercausal: float
+
+
+class AnalysisResult(BaseModel):
+    text: str
+    events: list[AnalysisEvent]
+    relations: list[AnalysisRelationItem]

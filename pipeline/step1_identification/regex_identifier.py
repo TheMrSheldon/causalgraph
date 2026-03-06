@@ -29,6 +29,10 @@ _EXPLICIT_PATTERNS: list[str] = [
     r"\b(contributes?\s+to|responsible\s+for|accounts?\s+for|explains?)\b",
     # Mechanism language
     r"\b(via|through|by\s+(?:increasing|decreasing|blocking|activating|inhibiting))\b",
+    # Countercausal / negated causal claims (still causal posts; claim is refuted)
+    r"\b(?:does?\s+not|doesn'?t|cannot|can'?t|fail(?:s)?\s+to|never)\s+(?:cause|lead\s+to|result\s+in|trigger|increase|decrease|reduce|improve|prevent)\b",
+    r"\bno\s+(?:significant\s+)?(?:evidence|link|association|connection|relationship|effect|impact)\b",
+    r"\bnot\s+(?:linked\s+to|associated\s+with|correlated\s+with|causally\s+related)\b",
 ]
 
 # Patterns that signal implicit causality (study-report language)
