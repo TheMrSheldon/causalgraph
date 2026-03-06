@@ -24,7 +24,7 @@ pipeline:
     llm_max_tokens: 512
 
   step3_hierarchy:
-    implementation: "tfidf_ward"  # Options: embedding_hdbscan | tfidf_ward | llm
+    implementation: "tfidf_ward"  # Options: embedding_hdbscan | tfidf_ward | embedding_ward | llm
     n_levels: 3                          # Number of hierarchy levels to build
 
     # Embedding options (only used when implementation = embedding_hdbscan)
@@ -35,6 +35,15 @@ pipeline:
     # TF-IDF options (only used when implementation = tfidf_ward)
     tfidf_max_features: 5000
     tfidf_n_top_clusters: 200
+
+    # Embedding + Ward linkage options (only used when implementation = embedding_ward)
+    # embedding_model: "all-MiniLM-L6-v2"  # shared with embedding_hdbscan
+    # linkage_method: "ward"                # ward | complete | average
+    # n_clusters_per_level: [300, 60, 15]  # clusters at each level, finest → coarsest
+    #                                       # list length = number of levels (no upper limit)
+    #                                       # e.g. [500, 150, 40, 10] gives 4 levels
+    # max_texts: 8000    # O(n^2) memory cap; texts beyond this are assigned by nearest centroid
+    # use_norm: false    # false = embed raw cause/effect text; true = embed lowercased/lemmatised norm
 
     # LLM options (only used when implementation = llm)
     llm_model: "claude-haiku-4-5-20251001"

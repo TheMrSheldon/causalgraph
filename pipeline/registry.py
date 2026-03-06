@@ -62,6 +62,10 @@ _STEP3_REGISTRY: dict[str, tuple[str, str]] = {
         "pipeline.step3_hierarchy.tfidf_clusterer",
         "TFIDFClusterer",
     ),
+    "embedding_ward": (
+        "pipeline.step3_hierarchy.embedding_ward_clusterer",
+        "EmbeddingWardClusterer",
+    ),
     "llm": (
         "pipeline.step3_hierarchy.llm_topic_grouper",
         "LLMTopicGrouper",
