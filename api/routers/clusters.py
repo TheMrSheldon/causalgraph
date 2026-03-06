@@ -13,7 +13,7 @@ from api.models import (
     PaginatedPosts,
     PostSummary,
 )
-from pipeline.db import Database
+from api.db import GraphDatabase
 
 router = APIRouter(prefix="/api/clusters", tags=["clusters"])
 
@@ -29,7 +29,7 @@ def _to_node(raw: dict) -> ClusterNode:
 
 
 @router.get("/{cluster_id}", response_model=ClusterDetail)
-def get_cluster(cluster_id: int, db: Database = Depends(get_db)) -> ClusterDetail:
+def get_cluster(cluster_id: int, db: GraphDatabase = Depends(get_db)) -> ClusterDetail:
     """Return cluster metadata, its children, top event phrases, and sample posts."""
     raw = db.get_cluster_by_id(cluster_id)
     if raw is None:
@@ -65,7 +65,7 @@ def expand_cluster(
     cluster_id: int,
     min_post_count: int = Query(default=1, ge=1),
     context_ids: str = Query(default="", description="Comma-separated IDs of other visible clusters"),
-    db: Database = Depends(get_db),
+    db: GraphDatabase = Depends(get_db),
 ) -> GraphResponse:
     """
     Return child nodes of this cluster plus intra-cluster edges and border edges
@@ -108,7 +108,7 @@ def get_cluster_posts(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     sort: str = Query(default="score", pattern="^(score|date|comments)$"),
-    db: Database = Depends(get_db),
+    db: GraphDatabase = Depends(get_db),
 ) -> PaginatedPosts:
     """Return paginated posts associated with this cluster."""
     if db.get_cluster_by_id(cluster_id) is None:

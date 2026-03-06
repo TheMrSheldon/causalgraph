@@ -10,6 +10,11 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      '/pipeline': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\/pipeline/, ''),
+      },
     },
   },
 })

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 
 from api.dependencies import get_db
 from api.models import ClusterNode, GraphEdge, GraphResponse, LevelCounts
-from pipeline.db import Database
+from api.db import GraphDatabase
 
 router = APIRouter(prefix="/api/graph", tags=["graph"])
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/graph", tags=["graph"])
 def get_graph(
     level: int = Query(default=2, ge=0, le=10, description="Hierarchy level to show as top nodes"),
     min_post_count: int = Query(default=1, ge=1, description="Filter edges with fewer posts"),
-    db: Database = Depends(get_db),
+    db: GraphDatabase = Depends(get_db),
 ) -> GraphResponse:
     """
     Return top-level graph: all cluster nodes at the requested level,
@@ -45,7 +45,7 @@ def get_graph(
 
 
 @router.get("/levels", response_model=LevelCounts)
-def get_levels(db: Database = Depends(get_db)) -> LevelCounts:
+def get_levels(db: GraphDatabase = Depends(get_db)) -> LevelCounts:
     """Return available hierarchy levels and the number of clusters at each."""
     counts = db.get_level_counts()
     levels = sorted(counts.keys())

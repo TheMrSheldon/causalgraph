@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_db
 from api.models import EdgePostSummary, PaginatedEdgePosts, PaginatedPosts, PostDetail, PostSummary
-from pipeline.db import Database
+from api.db import GraphDatabase
 
 router = APIRouter(prefix="/api/posts", tags=["posts"])
 
@@ -16,7 +16,7 @@ def get_posts_for_edge(
     target_cluster_id: int = Query(..., description="Effect-side cluster ID"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    db: Database = Depends(get_db),
+    db: GraphDatabase = Depends(get_db),
 ) -> PaginatedEdgePosts:
     """
     Return posts where the cause event belongs to source_cluster and the
@@ -47,7 +47,7 @@ def get_posts_for_edge(
 
 
 @router.get("/{post_id}", response_model=PostDetail)
-def get_post(post_id: str, db: Database = Depends(get_db)) -> PostDetail:
+def get_post(post_id: str, db: GraphDatabase = Depends(get_db)) -> PostDetail:
     """Return a single post with its extracted causal pair."""
     row = db.get_post_by_id(post_id)
     if row is None:

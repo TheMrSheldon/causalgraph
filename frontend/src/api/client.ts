@@ -33,6 +33,7 @@ function mockPaths(causeQuery: string, effectQuery: string): PathsResponse {
 
 
 const http = axios.create({ baseURL: '/api' })
+const pipelineHttp = axios.create({ baseURL: '/pipeline' })
 
 export const api = {
   getGraph: async (level = 2, minPostCount = 1): Promise<GraphData> => {
@@ -99,7 +100,7 @@ export const api = {
   },
 
   analyzeText: async (text: string): Promise<AnalysisResponse> => {
-    const { data } = await http.post<AnalysisResponse>('/analyze', { text })
+    const { data } = await pipelineHttp.post<AnalysisResponse>('/extract', { text })
     return data
   },
 }

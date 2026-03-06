@@ -5,7 +5,7 @@ from functools import lru_cache
 
 import yaml
 
-from pipeline.db import Database
+from api.db import GraphDatabase
 
 
 @lru_cache(maxsize=1)
@@ -15,7 +15,7 @@ def get_config() -> dict:
 
 
 @lru_cache(maxsize=1)
-def get_db() -> Database:
+def get_db() -> GraphDatabase:
     config = get_config()
     db_path = config["api"]["db_path"]
-    return Database(db_path)
+    return GraphDatabase(db_path)

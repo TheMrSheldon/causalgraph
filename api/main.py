@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.dependencies import get_config
-from api.routers import analyze, clusters, graph, posts
+from api.routers import clusters, graph, posts
 
 
 @asynccontextmanager
@@ -40,7 +40,6 @@ def create_app() -> FastAPI:
     app.include_router(graph.router)
     app.include_router(clusters.router)
     app.include_router(posts.router)
-    app.include_router(analyze.router)
 
     @app.get("/health")
     def health() -> dict:

@@ -60,6 +60,8 @@ pipeline:
 
 The registry validates Protocol conformance at load time using `isinstance()` on the `@runtime_checkable` Protocol. If your class is missing required methods, you'll get a `TypeError` immediately.
 
+The new implementation is automatically available in the pipeline server (`uvicorn pipeline.server:app`) without any changes — it uses the same `config.yaml`.
+
 ---
 
 ## Protocol reference
@@ -134,24 +136,35 @@ The `Database.insert_memberships()` method resolves these indices to actual DB r
 
 1. Add a route function to an existing router in `api/routers/` or create a new router file.
 2. Define the response model in `api/models.py`.
-3. Add any new DB query methods to `pipeline/db.py`.
+3. Add any new DB query methods to `api/db.py` (`GraphDatabase` class).
 4. Include the new router in `api/main.py` via `app.include_router(...)`.
 5. Add a test in `tests/test_api.py`.
+
+> [!NOTE]
+> `api/db.py` is intentionally read-only and has no dependency on `pipeline/`. Keep it that way — all write operations belong in `pipeline/db.py`.
 
 ---
 
 ## Frontend customization
 
+### Graph layout
+
+The layout algorithm can be changed in the **Settings panel** (gear icon) at runtime — no code changes needed. Available built-in options:
+
+| Algorithm | Notes |
+|-----------|-------|
+| `fcose` | Force-directed, compound-aware *(default)* |
+| `cose` | Cytoscape built-in force-directed |
+| `breadthfirst` | Tree layout, directed |
+| `concentric` | Rings by connectivity |
+| `circle` | Equal-radius circle |
+
+To add a new layout algorithm (e.g. a Cytoscape extension), install the npm package, register it with `cytoscape.use(...)` in `CausalGraph.tsx`, add its name to the `LayoutAlgorithm` union in `types.ts`, and add a case to the `buildLayout()` function in `CausalGraph.tsx`.
+
+### Styling
+
 The Cytoscape.js stylesheet is defined inline in `frontend/src/components/CausalGraph.tsx`. Node colors, edge widths, and fonts are all controlled there.
 
-To change the graph layout, replace `fcose` with any Cytoscape layout extension:
+### Post display
 
-```typescript
-import cola from 'cytoscape-cola';
-cytoscape.use(cola);
-
-// In CausalGraph.tsx:
-cy.layout({ name: 'cola', animate: true }).run();
-```
-
-Available compound-aware layouts: `fcose`, `cola`, `cose-bilkent`.
+The `PostItem` component (`frontend/src/components/PostItem.tsx`) renders individual posts in both the edge detail drawer and the cluster detail sidebar. It accepts an optional `showSpans` prop to highlight cause/effect spans — this is controlled by the "Highlight event spans" toggle in Settings.

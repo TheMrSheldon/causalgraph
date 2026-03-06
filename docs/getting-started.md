@@ -55,7 +55,7 @@ sqlite3 data/pipeline.db "SELECT level, COUNT(*) FROM clusters GROUP BY level;"
 
 ---
 
-## 3. Start the API server
+## 3. Start the backend API
 
 ```bash
 uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
@@ -63,9 +63,31 @@ uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
 The API is available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
 
+The backend reads `data/pipeline.db` and has **no dependency on the `pipeline/` package** — it is connected to the pipeline only via the SQLite database. See [docs/graphformat.md](graphformat.md) for the schema contract.
+
 ---
 
-## 4. Start the frontend
+## 4. Start the pipeline server
+
+The pipeline server exposes each pipeline step as a REST endpoint. It is used by the frontend's **Text Analyzer** feature (type any sentence to extract causal relations live).
+
+```bash
+uvicorn pipeline.server:app --host 0.0.0.0 --port 8001
+```
+
+Endpoints:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST /identify` | `{"text": "..."}` | Step 1: classify text as causal or not |
+| `POST /extract` | `{"text": "..."}` | Step 2: extract (cause, effect) pairs with spans |
+| `GET /health` | — | Liveness check |
+
+The pipeline server uses the same `config.yaml` implementations as the batch pipeline runner.
+
+---
+
+## 5. Start the frontend
 
 ```bash
 cd frontend
@@ -73,7 +95,9 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173` in your browser.
+Open `http://localhost:5173` in your browser. The Vite dev server proxies:
+- `/api/*` → backend API at `http://localhost:8000`
+- `/pipeline/*` → pipeline server at `http://localhost:8001`
 
 ---
 
@@ -99,7 +123,7 @@ python scripts/run_pipeline.py --step 1
 python scripts/run_pipeline.py --step 3
 ```
 
-No code changes required.
+No code changes required. The pipeline server picks up the new implementation on next restart.
 
 ---
 
@@ -126,8 +150,8 @@ No code changes required.
 
 | Key | Description | Requirements |
 |-----|-------------|--------------|
-| `embedding_hdbscan` | sentence-transformers + HDBSCAN *(default)* | `pip install .[dev]` |
-| `tfidf_ward` | TF-IDF + Ward agglomerative clustering | scikit-learn only |
+| `embedding_hdbscan` | sentence-transformers + HDBSCAN | `pip install .[dev]` |
+| `tfidf_ward` | TF-IDF + Ward agglomerative clustering *(default)* | scikit-learn only |
 | `llm` | LLM-assigned topic labels | API key |
 
 ---

@@ -10,20 +10,24 @@ The project extracts causal claims from 867K Reddit r/science submission titles,
 flowchart LR
     A[(rscience-submissions.parquet\n867K titles)] -->|DuckDB stream| B
 
-    subgraph Pipeline
+    subgraph Pipeline["Pipeline (offline)"]
         B[Step 1\nCausality Identification] -->|causal posts| C
         C[Step 2\nCausal Extraction] -->|cause / effect pairs| D
         D[Step 3\nHierarchy Inference] -->|clustered graph| E
     end
 
-    E[(pipeline.db\nSQLite)] -->|REST API| F
+    E[(pipeline.db\nSQLite)] -->|read-only| F
+    E -->|schema contract| G
 
-    subgraph Frontend
-        F[FastAPI] -->|JSON| G[React + Cytoscape.js]
+    subgraph Services["Runtime Services"]
+        F[Backend API\nport 8000] -->|JSON| H[React + Cytoscape.js\nport 5173]
+        G[Pipeline Server\nport 8001] -->|JSON| H
     end
 ```
 
 Each pipeline step is **independently pluggable**: the implementation is selected at runtime via `config.yaml` without any code changes.
+
+The backend API (`api/`) and the pipeline (`pipeline/`) share **no Python imports** — they are connected only through the SQLite database. See [graphformat.md](graphformat.md) for the schema contract.
 
 ---
 
@@ -35,9 +39,11 @@ Each pipeline step is **independently pluggable**: the implementation is selecte
 | `CausalityIdentifier` | Filter titles to those expressing causality | `pipeline/step1_identification/` |
 | `CausalExtractor` | Extract structured (cause, effect) pairs | `pipeline/step2_extraction/` |
 | `HierarchyInferrer` | Cluster events into 3-level hierarchy | `pipeline/step3_hierarchy/` |
-| `Database` | SQLite DAL — schema, writes, graph queries | `pipeline/db.py` |
+| `Database` (pipeline) | SQLite DAL — schema, writes, graph queries | `pipeline/db.py` |
+| `GraphDatabase` (API) | Read-only SQLite access for graph queries | `api/db.py` |
 | `Registry` | Load implementations from `config.yaml` | `pipeline/registry.py` |
-| FastAPI app | Serve graph data over REST | `api/` |
+| Backend API | Serve graph data over REST | `api/` |
+| Pipeline Server | Per-step REST API for live text analysis | `pipeline/server.py` |
 | React + Cytoscape.js | Interactive hierarchical causal graph | `frontend/` |
 
 ---
@@ -51,7 +57,8 @@ sequenceDiagram
     participant S2 as Step 2<br/>Extractor
     participant S3 as Step 3<br/>Inferrer
     participant DB as SQLite DB
-    participant API as FastAPI
+    participant API as Backend API
+    participant PS as Pipeline Server
     participant UI as Browser
 
     P->>S1: batch of 5000 Post objects
@@ -60,20 +67,28 @@ sequenceDiagram
     S2-->>DB: CausalRelation rows
     DB->>S3: all CausalRelations
     S3-->>DB: EventCluster rows + memberships
-    UI->>API: GET /api/graph?level=2
-    API->>DB: get_clusters_at_level(2) + get_edges()
+
+    UI->>API: GET /api/graph
+    API->>DB: get_clusters_at_level() + get_edges()
     API-->>UI: {nodes, edges}
+
     UI->>API: GET /api/clusters/{id}/expand
     API->>DB: get_children(id) + get_edges(child_ids)
     API-->>UI: {nodes, edges}
+
     UI->>API: GET /api/posts?source=&target=
     API->>DB: get_posts_for_edge()
     API-->>UI: {posts, total}
+
+    UI->>PS: POST /extract {"text": "..."}
+    PS-->>UI: {events, relations}
 ```
 
 ---
 
 ## Database Schema
+
+See [graphformat.md](graphformat.md) for the full schema specification.
 
 ```mermaid
 erDiagram
@@ -97,6 +112,7 @@ erDiagram
         TEXT effect_norm
         REAL confidence
         TEXT extractor
+        INTEGER is_countercausal
     }
 
     clusters {
@@ -116,13 +132,22 @@ erDiagram
         TEXT event_text
     }
 
+    leaf_edges {
+        INTEGER source_cluster_id PK
+        INTEGER target_cluster_id PK
+        INTEGER relation_count
+        INTEGER post_count
+        REAL avg_score
+        INTEGER countercausal_count
+    }
+
     posts ||--o{ causal_relations : "has"
     causal_relations ||--o{ cluster_members : "referenced by"
     clusters ||--o{ cluster_members : "contains"
     clusters ||--o{ clusters : "parent of"
+    clusters ||--o{ leaf_edges : "source"
+    clusters ||--o{ leaf_edges : "target"
 ```
-
-The `graph_edges` VIEW joins `cluster_members` to produce aggregated cause→effect edges between clusters, used by all graph API endpoints.
 
 ---
 
@@ -166,7 +191,7 @@ classDiagram
 
 ## Hierarchy Model
 
-Events are organized into a 3-level tree. The frontend renders each level as Cytoscape.js compound nodes.
+Events are organized into a 3-level tree. The frontend renders the topmost level on load and supports drill-down via double-click.
 
 ```mermaid
 graph TD
@@ -188,17 +213,17 @@ graph TD
     T2 --> M3 --> L4
 ```
 
-Directed edges between clusters represent extracted causal relationships; edge weight encodes post count.
+Directed edges between clusters represent extracted causal relationships; edge weight encodes post count. The frontend always starts at the topmost level (`MAX(level)`) and infers this automatically from the API.
 
 ---
 
 ## API Reference
 
-All endpoints are read-only (`GET`). The API is served at `http://localhost:8000`.
+### Backend API (port 8000) — read-only graph endpoints
 
 ```mermaid
 graph LR
-    A[GET /api/graph] -->|level, min_post_count| B{FastAPI}
+    A[GET /api/graph] -->|min_post_count| B{Backend API}
     C[GET /api/graph/levels] --> B
     D[GET /api/clusters/id] --> B
     E[GET /api/clusters/id/expand] --> B
@@ -210,7 +235,7 @@ graph LR
 
 | Endpoint | Parameters | Purpose |
 |----------|------------|---------|
-| `GET /api/graph` | `level`, `min_post_count` | Top-level nodes + edges at a given hierarchy level |
+| `GET /api/graph` | `min_post_count` | Top-level nodes + edges at the topmost hierarchy level |
 | `GET /api/graph/levels` | — | Available levels and cluster counts |
 | `GET /api/clusters/{id}` | — | Cluster detail: children, top events, sample posts |
 | `GET /api/clusters/{id}/expand` | `min_post_count` | Child nodes + intra-cluster edges (drill-down) |
@@ -218,13 +243,21 @@ graph LR
 | `GET /api/posts` | `source_cluster_id`, `target_cluster_id` | Posts for a cause→effect edge click |
 | `GET /api/posts/{id}` | — | Single post with extracted causal pair |
 
+### Pipeline Server (port 8001) — live text analysis
+
+| Endpoint | Body | Purpose |
+|----------|------|---------|
+| `POST /identify` | `{"text": "..."}` | Classify text as causal (`is_causal: bool`) |
+| `POST /extract` | `{"text": "..."}` | Extract events and relations with character spans |
+| `GET /health` | — | Liveness check |
+
 ---
 
 ## Frontend Interaction Model
 
 ```mermaid
 stateDiagram-v2
-    [*] --> TopLevel : page load\nGET /api/graph?level=2
+    [*] --> TopLevel : page load\nGET /api/graph (topmost level)
 
     TopLevel --> Expanded : double-click node\nGET /api/clusters/id/expand
     Expanded --> TopLevel : right-click node\n(collapse)
@@ -241,6 +274,8 @@ The Cytoscape.js graph uses **compound nodes** to represent expanded clusters. W
 
 1. `GET /api/clusters/{id}/expand` fetches child nodes and intra-cluster edges.
 2. Child nodes are added to the Cytoscape element set with `parent: "cluster-{id}"`.
-3. The parent node becomes a compound container; Cytoscape re-runs the `fcose` layout.
+3. The parent node becomes a compound container; Cytoscape re-runs the layout.
 
 Collapsing removes child elements and resets the parent to a regular node.
+
+The graph layout algorithm can be changed in the Settings panel (defaults to `fcose`). Available built-in options: `fcose`, `cose`, `breadthfirst`, `concentric`, `circle`.
