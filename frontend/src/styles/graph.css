@@ -206,6 +206,78 @@ html, body, #root {
   color: var(--webis-heading);
 }
 
+.settings-select,
+.settings-number {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--webis-border);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--webis-text);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.settings-number {
+  width: 80px;
+}
+
+/* ── Stats modal rows ────────────────────────────────────────────────── */
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 3px 0;
+  gap: 8px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--webis-text);
+  white-space: pre; /* preserve leading spaces for indentation */
+}
+
+.stat-label--trunc {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 55%;
+}
+
+.stat-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--webis-heading);
+  white-space: nowrap;
+}
+
+.stat-sub {
+  font-weight: 400;
+  color: #888;
+}
+
+.stat-edge-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--webis-border);
+}
+
+.stat-edge-row:last-child {
+  border-bottom: none;
+}
+
+.stat-edge-label {
+  font-size: 11px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ── Toggle switch ───────────────────────────────────────────────────── */
 
 .toggle-row {

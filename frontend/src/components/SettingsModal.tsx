@@ -1,3 +1,4 @@
+import { useLevels } from '../hooks/useGraph'
 import type { GraphSettings, NodeSpacing, VisualizationMode } from '../types'
 
 interface SettingsModalProps {
@@ -5,6 +6,10 @@ interface SettingsModalProps {
   settings: GraphSettings
   onSettingsChange: (s: GraphSettings) => void
   onClose: () => void
+  level: number
+  minPostCount: number
+  onLevelChange: (level: number) => void
+  onMinPostCountChange: (count: number) => void
 }
 
 function SegmentedControl<T extends string>({
@@ -63,7 +68,12 @@ const SPACING_OPTIONS: { value: NodeSpacing; label: string }[] = [
   { value: 'spread', label: 'Spread' },
 ]
 
-export function SettingsModal({ open, settings, onSettingsChange, onClose }: SettingsModalProps) {
+export function SettingsModal({
+  open, settings, onSettingsChange, onClose,
+  level, minPostCount, onLevelChange, onMinPostCountChange,
+}: SettingsModalProps) {
+  const { data: levels } = useLevels()
+
   if (!open) return null
 
   const set = <K extends keyof GraphSettings>(key: K, value: GraphSettings[K]) =>
@@ -77,6 +87,35 @@ export function SettingsModal({ open, settings, onSettingsChange, onClose }: Set
           <button className="drawer-close" onClick={onClose} title="Close">✕</button>
         </div>
         <div className="modal-body">
+
+          <div className="settings-section">
+            <div className="settings-section-title">Graph Data</div>
+            <div className="settings-group">
+              <div className="settings-group-label">Hierarchy level</div>
+              <select
+                className="settings-select"
+                value={level}
+                onChange={(e) => onLevelChange(Number(e.target.value))}
+              >
+                {levels?.levels.map((l) => (
+                  <option key={l} value={l}>
+                    Level {l} ({levels.counts[String(l)] ?? 0} clusters)
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="settings-group">
+              <div className="settings-group-label">Min posts per edge</div>
+              <input
+                className="settings-number"
+                type="number"
+                min={1}
+                max={9999}
+                value={minPostCount}
+                onChange={(e) => onMinPostCountChange(Math.max(1, Number(e.target.value)))}
+              />
+            </div>
+          </div>
 
           <div className="settings-section">
             <div className="settings-section-title">Visual Encoding</div>

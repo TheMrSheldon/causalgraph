@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CausalGraph } from './components/CausalGraph'
 import { ClusterPanel } from './components/ClusterPanel'
-import { FilterBar } from './components/FilterBar'
 import { PathFinderScreen } from './components/PathFinderScreen'
 import { PostList } from './components/PostList'
 import { SettingsModal } from './components/SettingsModal'
+import { StatsModal } from './components/StatsModal'
 import { TextAnalyzerScreen } from './components/TextAnalyzerScreen'
 import { useClusterExpand } from './hooks/useClusterExpand'
 import { useGraph } from './hooks/useGraph'
@@ -22,6 +22,7 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(340)
   const dragState = useRef<{ startX: number; startWidth: number } | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [statsOpen, setStatsOpen] = useState(false)
   const [settings, setSettings] = useState<GraphSettings>(() => {
     const defaults: GraphSettings = {
       clusterSizeMode: 'no',
@@ -156,21 +157,18 @@ export default function App() {
         <div className="app-header-spacer" />
         {isExplorer && (
           <>
-            <FilterBar
-              level={level}
-              minPostCount={minPostCount}
-              onLevelChange={setLevel}
-              onMinPostCountChange={setMinPostCount}
-            />
             {isLoading && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Loading…</span>}
+            <button className="header-icon-btn" onClick={() => setStatsOpen(true)} title="Statistics" disabled={!graphData}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10"/>
+                <line x1="12" y1="20" x2="12" y2="4"/>
+                <line x1="6" y1="20" x2="6" y2="14"/>
+              </svg>
+            </button>
             <button className="header-icon-btn" onClick={() => setSettingsOpen(true)} title="Settings">
-              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                <line x1="3" y1="5" x2="17" y2="5"/>
-                <line x1="3" y1="10" x2="17" y2="10"/>
-                <line x1="3" y1="15" x2="17" y2="15"/>
-                <circle cx="7" cy="5" r="2" fill="currentColor" stroke="none"/>
-                <circle cx="13" cy="10" r="2" fill="currentColor" stroke="none"/>
-                <circle cx="7" cy="15" r="2" fill="currentColor" stroke="none"/>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
               </svg>
             </button>
           </>
@@ -195,11 +193,23 @@ export default function App() {
 
       {isExplorer && (
         <>
+          <StatsModal
+            open={statsOpen}
+            onClose={() => setStatsOpen(false)}
+            nodes={graphData?.nodes ?? []}
+            edges={graphData?.edges ?? []}
+            clusterLabels={clusterLabels}
+          />
+
           <SettingsModal
             open={settingsOpen}
             settings={settings}
             onSettingsChange={setSettings}
             onClose={() => setSettingsOpen(false)}
+            level={level}
+            minPostCount={minPostCount}
+            onLevelChange={setLevel}
+            onMinPostCountChange={setMinPostCount}
           />
 
           <main className="graph-container">

@@ -312,6 +312,8 @@ export function CausalGraph({
   useEffect(() => { settingsRef.current = settings }, [settings])
   const childNodesByParentRef = useRef(childNodesByParent)
   useEffect(() => { childNodesByParentRef.current = childNodesByParent }, [childNodesByParent])
+  const expandedNodesRef = useRef(expandedNodes)
+  useEffect(() => { expandedNodesRef.current = expandedNodes }, [expandedNodes])
 
   // Highlight a single node's edges
   const applyHighlight = useCallback((node: cytoscape.NodeSingular) => {
@@ -327,24 +329,40 @@ export function CausalGraph({
     incoming.addClass('edge-incoming')
   }, [])
 
-  // Apply focus: ghost non-children nodes, hide non-children edges, zoom to focused subset
+  // Apply focus: ghost non-focus nodes, hide non-focus edges, zoom to focused subset.
+  // "In focus" = all currently-visible nodes that are descendants of focusedId,
+  // following the expansion tree so that expanded children's children are included.
   const applyFocus = useCallback((focusedId: number, animate = true) => {
     const cy = cyRef.current
     if (!cy) return
-    const children = childNodesByParentRef.current.get(focusedId)
-    const childIds: Set<string> = children && children.length > 0
-      ? new Set(children.map((c) => `cluster-${c.id}`))
-      : new Set([`cluster-${focusedId}`])
+    const childNodes = childNodesByParentRef.current
+    const expanded = expandedNodesRef.current
+
+    // Walk the hierarchy from focusedId, expanding into children where expanded
+    const visibleIds = new Set<string>()
+    const queue: number[] = [focusedId]
+    while (queue.length > 0) {
+      const id = queue.shift()!
+      const children = childNodes.get(id)
+      if (children && children.length > 0 && expanded.has(id)) {
+        // Node is expanded → its children are visible instead; recurse
+        for (const child of children) queue.push(child.id)
+      } else {
+        // Node is visible as itself (leaf, not expanded, or children not loaded)
+        visibleIds.add(`cluster-${id}`)
+      }
+    }
+
     cy.nodes().forEach((n) => {
-      if (childIds.has(n.id())) n.removeClass('focus-dimmed')
+      if (visibleIds.has(n.id())) n.removeClass('focus-dimmed')
       else n.addClass('focus-dimmed')
     })
     cy.edges().forEach((e) => {
-      const inFocus = childIds.has(e.source().id()) && childIds.has(e.target().id())
+      const inFocus = visibleIds.has(e.source().id()) && visibleIds.has(e.target().id())
       if (inFocus) e.removeClass('focus-dimmed')
       else e.addClass('focus-dimmed')
     })
-    const focusedEles = cy.nodes().filter((n) => childIds.has(n.id()))
+    const focusedEles = cy.nodes().filter((n) => visibleIds.has(n.id()))
     if (focusedEles.length > 0) {
       cy.animate({ fit: { eles: focusedEles, padding: 80 } as cytoscape.Fit, duration: animate ? 400 : 0 })
     }
