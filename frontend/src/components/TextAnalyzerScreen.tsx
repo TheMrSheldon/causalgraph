@@ -100,7 +100,8 @@ function RelationRow({ rel, events }: { rel: AnalysisRelation; events: AnalysisE
 const EXAMPLE = `Exercise reduces the risk of heart disease and improves mental health.
 Chronic sleep deprivation increases the likelihood of obesity and leads to cognitive decline.
 Air pollution causes respiratory problems and triggers inflammation.
-Study finds no evidence that moderate alcohol consumption increases cancer risk.`
+Study finds no evidence that moderate alcohol consumption increases cancer risk.
+The likelihood that a cat causes reduction in vascular disease effects is in my opinion essentially nil.`
 
 // ---------------------------------------------------------------------------
 // Main screen

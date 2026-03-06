@@ -471,11 +471,17 @@ class Database:
             sort, "p.score"
         )
         sql = f"""
-            SELECT DISTINCT p.id, p.title, p.score, p.num_comments, p.created_utc, p.permalink
+            SELECT p.id, p.title, p.score, p.num_comments, p.created_utc, p.permalink,
+                   cr.cause_text, cr.effect_text, cr.is_countercausal
             FROM posts p
-            JOIN causal_relations cr ON cr.post_id = p.id
-            JOIN cluster_members cm ON cm.relation_id = cr.id
-            WHERE cm.cluster_id = ?
+            JOIN (
+                SELECT cr2.post_id, MIN(cr2.id) AS min_cr_id
+                FROM causal_relations cr2
+                JOIN cluster_members cm2 ON cm2.relation_id = cr2.id
+                WHERE cm2.cluster_id = ?
+                GROUP BY cr2.post_id
+            ) best ON best.post_id = p.id
+            JOIN causal_relations cr ON cr.id = best.min_cr_id
             ORDER BY {sort_col} DESC
             LIMIT ? OFFSET ?
         """

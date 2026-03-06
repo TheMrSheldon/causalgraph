@@ -7,6 +7,7 @@ from api.dependencies import get_db
 from api.models import (
     ClusterDetail,
     ClusterNode,
+    EdgePostSummary,
     GraphEdge,
     GraphResponse,
     PaginatedPosts,
@@ -43,13 +44,16 @@ def get_cluster(cluster_id: int, db: Database = Depends(get_db)) -> ClusterDetai
         children=[_to_node(c) for c in children_raw],
         top_events=top_events,
         posts=[
-            PostSummary(
+            EdgePostSummary(
                 id=p["id"],
                 title=p["title"],
                 score=p["score"],
                 num_comments=p["num_comments"],
                 created_utc=p["created_utc"],
                 permalink=p["permalink"],
+                cause_text=p.get("cause_text"),
+                effect_text=p.get("effect_text"),
+                is_countercausal=bool(p.get("is_countercausal", False)),
             )
             for p in posts_raw
         ],

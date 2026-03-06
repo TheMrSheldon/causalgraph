@@ -7,7 +7,7 @@ import { SettingsModal } from './components/SettingsModal'
 import { StatsModal } from './components/StatsModal'
 import { TextAnalyzerScreen } from './components/TextAnalyzerScreen'
 import { useClusterExpand } from './hooks/useClusterExpand'
-import { useGraph } from './hooks/useGraph'
+import { useGraph, useLevels } from './hooks/useGraph'
 import './styles/graph.css'
 import type { GraphSettings, SelectedEdge } from './types'
 
@@ -15,7 +15,6 @@ type Screen = 'explorer' | 'pathfinder' | 'analyzer'
 
 export default function App() {
   const [activeScreen, setActiveScreen] = useState<Screen>('explorer')
-  const [level, setLevel] = useState(2)
   const [minPostCount, setMinPostCount] = useState(1)
   const [selectedCluster, setSelectedCluster] = useState<number | null>(null)
   const [selectedEdge, setSelectedEdge] = useState<SelectedEdge | null>(null)
@@ -32,9 +31,11 @@ export default function App() {
       dimOnSelection: true,
       highlightOnHover: false,
       nodeSpacing: 'normal',
+      layoutAlgorithm: 'fcose',
       animateLayout: true,
       showArrows: true,
       showLegend: true,
+      showHighlightSpans: true,
     }
     try {
       const saved = localStorage.getItem('graph-settings')
@@ -63,7 +64,9 @@ export default function App() {
     }
   }, [])
 
-  const { data: graphData, isLoading } = useGraph(level, minPostCount)
+  const { data: levelsData } = useLevels()
+  const topLevel = levelsData ? Math.max(...levelsData.levels) : 2
+  const { data: graphData, isLoading } = useGraph(topLevel, minPostCount)
   const { expandCluster, collapseCluster, isExpanded, getExpandedData } = useClusterExpand()
 
   const childNodesByParent = useMemo(() => {
@@ -206,9 +209,7 @@ export default function App() {
             settings={settings}
             onSettingsChange={setSettings}
             onClose={() => setSettingsOpen(false)}
-            level={level}
             minPostCount={minPostCount}
-            onLevelChange={setLevel}
             onMinPostCountChange={setMinPostCount}
           />
 
@@ -241,10 +242,10 @@ export default function App() {
             {selectedEdge
               ? <PostList
                   edge={selectedEdge}
-                  onClose={() => setSelectedEdge(null)}
                   sourceLabel={clusterLabels.get(selectedEdge.source_cluster_id)}
                   targetLabel={clusterLabels.get(selectedEdge.target_cluster_id)}
                   onClusterClick={handleClusterClick}
+                  showHighlightSpans={settings.showHighlightSpans}
                 />
               : <ClusterPanel
                   clusterId={selectedCluster}
@@ -252,6 +253,7 @@ export default function App() {
                   onClusterClick={handleClusterClick}
                   isExpanded={isExpanded}
                   onCollapseRequest={collapseCluster}
+                  showHighlightSpans={settings.showHighlightSpans}
                 />
             }
           </aside>

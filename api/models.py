@@ -51,7 +51,7 @@ class ClusterDetail(BaseModel):
     cluster: ClusterNode
     children: list[ClusterNode]
     top_events: list[str]
-    posts: list[PostSummary]
+    posts: list[EdgePostSummary]
 
 
 class PaginatedPosts(BaseModel):

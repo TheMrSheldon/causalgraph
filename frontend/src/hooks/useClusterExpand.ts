@@ -31,10 +31,21 @@ export function useClusterExpand() {
   const collapseCluster = useCallback((clusterId: number) => {
     setExpandedClusters((prev) => {
       const next = new Set(prev)
-      next.delete(clusterId)
+      // BFS: collapse the node and every expanded descendant at any depth
+      const queue = [clusterId]
+      while (queue.length > 0) {
+        const id = queue.shift()!
+        next.delete(id)
+        const children = cache.get(id)
+        if (children) {
+          for (const child of children.nodes) {
+            if (next.has(child.id)) queue.push(child.id)
+          }
+        }
+      }
       return next
     })
-  }, [])
+  }, [cache])
 
   const isExpanded = useCallback(
     (clusterId: number) => expandedClusters.has(clusterId),

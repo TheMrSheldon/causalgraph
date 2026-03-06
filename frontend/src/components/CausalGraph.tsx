@@ -2,29 +2,65 @@ import cytoscape, { type ElementDefinition, type StylesheetStyle } from 'cytosca
 // @ts-expect-error – no types for fcose
 import fcose from 'cytoscape-fcose'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ClusterNode, GraphEdge, GraphSettings, NodeSpacing, SelectedEdge } from '../types'
+import type { ClusterNode, GraphEdge, GraphSettings, LayoutAlgorithm, NodeSpacing, SelectedEdge } from '../types'
 
 cytoscape.use(fcose)
 
-const SPACING_PARAMS: Record<NodeSpacing, { nodeRepulsion: number; idealEdgeLength: number; nodeSeparation: number }> = {
-  tight:  { nodeRepulsion: 150000, idealEdgeLength: 200, nodeSeparation: 150 },
-  normal: { nodeRepulsion: 300000, idealEdgeLength: 350, nodeSeparation: 250 },
-  spread: { nodeRepulsion: 600000, idealEdgeLength: 500, nodeSeparation: 400 },
+const SPACING_PARAMS: Record<NodeSpacing, { nodeRepulsion: number; idealEdgeLength: number; nodeSeparation: number; spacingFactor: number }> = {
+  tight:  { nodeRepulsion: 150000, idealEdgeLength: 200, nodeSeparation: 150, spacingFactor: 0.7 },
+  normal: { nodeRepulsion: 300000, idealEdgeLength: 350, nodeSeparation: 250, spacingFactor: 1.2 },
+  spread: { nodeRepulsion: 600000, idealEdgeLength: 500, nodeSeparation: 400, spacingFactor: 2.0 },
 }
 
-function buildFcoseLayout(nodeSpacing: NodeSpacing, animate: boolean): cytoscape.LayoutOptions {
+function buildLayout(algorithm: LayoutAlgorithm, nodeSpacing: NodeSpacing, animate: boolean): cytoscape.LayoutOptions {
   const sp = SPACING_PARAMS[nodeSpacing]
+  const common = { animate, animationDuration: 600, padding: 60 }
+  if (algorithm === 'fcose') {
+    return {
+      name: 'fcose',
+      ...common,
+      nodeRepulsion: () => sp.nodeRepulsion,
+      idealEdgeLength: () => sp.idealEdgeLength,
+      nodeSeparation: sp.nodeSeparation,
+      gravity: 0.04,
+      gravityRange: 1.5,
+      numIter: 5000,
+    } as cytoscape.LayoutOptions
+  }
+  if (algorithm === 'cose') {
+    return {
+      name: 'cose',
+      ...common,
+      nodeRepulsion: () => sp.nodeRepulsion,
+      idealEdgeLength: sp.idealEdgeLength,
+      nodeDimensionsIncludeLabels: true,
+      numIter: 1000,
+      gravity: 1,
+    } as cytoscape.LayoutOptions
+  }
+  if (algorithm === 'breadthfirst') {
+    return {
+      name: 'breadthfirst',
+      ...common,
+      directed: true,
+      spacingFactor: sp.spacingFactor,
+      nodeDimensionsIncludeLabels: true,
+    } as cytoscape.LayoutOptions
+  }
+  if (algorithm === 'concentric') {
+    return {
+      name: 'concentric',
+      ...common,
+      spacingFactor: sp.spacingFactor,
+      nodeDimensionsIncludeLabels: true,
+    } as cytoscape.LayoutOptions
+  }
+  // circle
   return {
-    name: 'fcose',
-    animate,
-    animationDuration: 600,
-    nodeRepulsion: () => sp.nodeRepulsion,
-    idealEdgeLength: () => sp.idealEdgeLength,
-    nodeSeparation: sp.nodeSeparation,
-    gravity: 0.04,
-    gravityRange: 1.5,
-    padding: 60,
-    numIter: 5000,
+    name: 'circle',
+    ...common,
+    spacingFactor: sp.spacingFactor,
+    nodeDimensionsIncludeLabels: true,
   } as cytoscape.LayoutOptions
 }
 
@@ -197,7 +233,7 @@ function buildCytoscapeStyle(settings: GraphSettings): StylesheetStyle[] {
     },
     {
       selector: 'edge.focus-dimmed',
-      style: { opacity: 0 },
+      style: { opacity: 0, events: 'no' } as AnyStyle,
     },
   ]
 }
@@ -428,7 +464,7 @@ export function CausalGraph({
     cyRef.current = cytoscape({
       container: containerRef.current,
       style: buildCytoscapeStyle(settings),
-      layout: buildFcoseLayout(settings.nodeSpacing, settings.animateLayout),
+      layout: buildLayout(settings.layoutAlgorithm, settings.nodeSpacing, settings.animateLayout),
       userZoomingEnabled: true,
       userPanningEnabled: true,
       boxSelectionEnabled: false,
@@ -513,8 +549,8 @@ export function CausalGraph({
   // Re-run layout when spacing or animation settings change
   useEffect(() => {
     if (!layoutInitRef.current) { layoutInitRef.current = true; return }
-    cyRef.current?.layout(buildFcoseLayout(settings.nodeSpacing, settings.animateLayout)).run()
-  }, [settings.nodeSpacing, settings.animateLayout]) // eslint-disable-line react-hooks/exhaustive-deps
+    cyRef.current?.layout(buildLayout(settings.layoutAlgorithm, settings.nodeSpacing, settings.animateLayout)).run()
+  }, [settings.layoutAlgorithm, settings.nodeSpacing, settings.animateLayout]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Programmatically highlight node when selectedClusterId changes (from sidebar links)
   useEffect(() => {
@@ -558,7 +594,7 @@ export function CausalGraph({
       cy.style(buildCytoscapeStyle(settingsRef.current))
       cy.elements().removeClass('edge-outgoing edge-incoming dimmed').remove()
       cy.add(elements)
-      cy.layout(buildFcoseLayout(settingsRef.current.nodeSpacing, settingsRef.current.animateLayout)).run()
+      cy.layout(buildLayout(settingsRef.current.layoutAlgorithm, settingsRef.current.nodeSpacing, settingsRef.current.animateLayout)).run()
       return
     }
 
@@ -570,7 +606,7 @@ export function CausalGraph({
     const toAdd = elements.filter((e) => !currentIds.has(e.data.id as string))
     if (toAdd.length > 0) {
       cy.add(toAdd)
-      cy.layout(buildFcoseLayout(settingsRef.current.nodeSpacing, settingsRef.current.animateLayout)).run()
+      cy.layout(buildLayout(settingsRef.current.layoutAlgorithm, settingsRef.current.nodeSpacing, settingsRef.current.animateLayout)).run()
     }
 
     // Re-apply selection highlight after expand/collapse

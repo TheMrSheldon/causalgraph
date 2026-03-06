@@ -39,7 +39,7 @@ export interface ClusterDetail {
   cluster: ClusterNode;
   children: ClusterNode[];
   top_events: string[];
-  posts: PostSummary[];
+  posts: EdgePostSummary[];
 }
 
 export interface PaginatedPosts {
@@ -125,6 +125,7 @@ export interface AnalysisResponse {
 
 export type VisualizationMode = 'no' | 'opacity' | 'size'
 export type NodeSpacing = 'tight' | 'normal' | 'spread'
+export type LayoutAlgorithm = 'fcose' | 'cose' | 'breadthfirst' | 'circle' | 'concentric'
 
 export interface GraphSettings {
   clusterSizeMode: VisualizationMode
@@ -134,7 +135,9 @@ export interface GraphSettings {
   dimOnSelection: boolean
   highlightOnHover: boolean
   nodeSpacing: NodeSpacing
+  layoutAlgorithm: LayoutAlgorithm
   animateLayout: boolean
   showArrows: boolean
   showLegend: boolean
+  showHighlightSpans: boolean
 }

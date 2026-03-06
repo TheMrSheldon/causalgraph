@@ -1,14 +1,11 @@
-import { useLevels } from '../hooks/useGraph'
-import type { GraphSettings, NodeSpacing, VisualizationMode } from '../types'
+import type { GraphSettings, LayoutAlgorithm, NodeSpacing, VisualizationMode } from '../types'
 
 interface SettingsModalProps {
   open: boolean
   settings: GraphSettings
   onSettingsChange: (s: GraphSettings) => void
   onClose: () => void
-  level: number
   minPostCount: number
-  onLevelChange: (level: number) => void
   onMinPostCountChange: (count: number) => void
 }
 
@@ -68,12 +65,18 @@ const SPACING_OPTIONS: { value: NodeSpacing; label: string }[] = [
   { value: 'spread', label: 'Spread' },
 ]
 
+const LAYOUT_OPTIONS: { value: LayoutAlgorithm; label: string }[] = [
+  { value: 'fcose',       label: 'fCoSE'       },
+  { value: 'cose',        label: 'CoSE'        },
+  { value: 'breadthfirst', label: 'Hierarchy'  },
+  { value: 'concentric',  label: 'Concentric'  },
+  { value: 'circle',      label: 'Circle'      },
+]
+
 export function SettingsModal({
   open, settings, onSettingsChange, onClose,
-  level, minPostCount, onLevelChange, onMinPostCountChange,
+  minPostCount, onMinPostCountChange,
 }: SettingsModalProps) {
-  const { data: levels } = useLevels()
-
   if (!open) return null
 
   const set = <K extends keyof GraphSettings>(key: K, value: GraphSettings[K]) =>
@@ -90,20 +93,6 @@ export function SettingsModal({
 
           <div className="settings-section">
             <div className="settings-section-title">Graph Data</div>
-            <div className="settings-group">
-              <div className="settings-group-label">Hierarchy level</div>
-              <select
-                className="settings-select"
-                value={level}
-                onChange={(e) => onLevelChange(Number(e.target.value))}
-              >
-                {levels?.levels.map((l) => (
-                  <option key={l} value={l}>
-                    Level {l} ({levels.counts[String(l)] ?? 0} clusters)
-                  </option>
-                ))}
-              </select>
-            </div>
             <div className="settings-group">
               <div className="settings-group-label">Min posts per edge</div>
               <input
@@ -140,6 +129,18 @@ export function SettingsModal({
           <div className="settings-section">
             <div className="settings-section-title">Layout</div>
             <div className="settings-group">
+              <div className="settings-group-label">Algorithm</div>
+              <select
+                className="settings-select"
+                value={settings.layoutAlgorithm}
+                onChange={(e) => set('layoutAlgorithm', e.target.value as LayoutAlgorithm)}
+              >
+                {LAYOUT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="settings-group">
               <div className="settings-group-label">Node spacing</div>
               <SegmentedControl value={settings.nodeSpacing} onChange={(v) => set('nodeSpacing', v)} options={SPACING_OPTIONS} />
             </div>
@@ -150,6 +151,7 @@ export function SettingsModal({
             <div className="settings-section-title">Display</div>
             <Toggle label="Show arrows" value={settings.showArrows} onChange={(v) => set('showArrows', v)} />
             <Toggle label="Show legend" value={settings.showLegend} onChange={(v) => set('showLegend', v)} />
+            <Toggle label="Highlight event spans in posts" value={settings.showHighlightSpans} onChange={(v) => set('showHighlightSpans', v)} />
           </div>
 
         </div>

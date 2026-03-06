@@ -1,5 +1,5 @@
 import { useCluster } from '../hooks/useGraph'
-import type { PostSummary } from '../types'
+import { PostItem } from './PostItem'
 
 interface ClusterPanelProps {
   clusterId: number | null
@@ -7,6 +7,7 @@ interface ClusterPanelProps {
   onClusterClick?: (clusterId: number) => void
   isExpanded?: (id: number) => boolean
   onCollapseRequest?: (id: number) => void
+  showHighlightSpans?: boolean
 }
 
 const LEVEL_META = [
@@ -15,23 +16,7 @@ const LEVEL_META = [
   { label: 'Top',  cls: 'wlabel'                 },
 ] as const
 
-function PostItem({ post }: { post: PostSummary }) {
-  const date = new Date(post.created_utc * 1000).toLocaleDateString()
-  const href = post.permalink
-    ? `https://reddit.com${post.permalink}`
-    : `https://reddit.com/r/science/comments/${post.id}`
-
-  return (
-    <div className="post-item">
-      <p className="post-title">
-        {post.title}{' '}[<a className="res-link" href={href} target="_blank" rel="noopener noreferrer">reddit</a>]
-      </p>
-      <span className="post-meta">↑ {post.score} · {post.num_comments} comments · {date}</span>
-    </div>
-  )
-}
-
-export function ClusterPanel({ clusterId, clusterLabels, onClusterClick, isExpanded, onCollapseRequest }: ClusterPanelProps) {
+export function ClusterPanel({ clusterId, clusterLabels, onClusterClick, isExpanded, onCollapseRequest, showHighlightSpans = false }: ClusterPanelProps) {
   const { data, isLoading } = useCluster(clusterId)
 
   if (clusterId === null) {
@@ -110,7 +95,7 @@ export function ClusterPanel({ clusterId, clusterLabels, onClusterClick, isExpan
       {data.posts.length > 0 && (
         <>
           <div className="cluster-section-label">Sample posts</div>
-          {data.posts.map((p) => <PostItem key={p.id} post={p} />)}
+          {data.posts.map((p) => <PostItem key={p.id} post={p} showSpans={showHighlightSpans} showDate />)}
         </>
       )}
     </div>
