@@ -109,6 +109,8 @@ export interface AnalysisRelation {
   effect_event_index: number
   cause_text: string
   effect_text: string
+  cause_canonical: string   // self-contained description from Step 3; may equal cause_text
+  effect_canonical: string  // self-contained description from Step 3; may equal effect_text
   is_countercausal: boolean
   p_none: number
   p_causal: number

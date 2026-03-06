@@ -237,7 +237,8 @@ class EmbeddingWardClusterer:
             fit_lbs = all_fit_labels[lvl]
             texts_by_label: dict[int, list[str]] = {}
             for ti, lbl in enumerate(fit_lbs):
-                texts_by_label.setdefault(int(lbl), []).append(all_norms[fit_idx[ti]])
+                # Use canonical descriptions for label generation (richer than norms)
+                texts_by_label.setdefault(int(lbl), []).append(all_canonicals[fit_idx[ti]])
 
             label_to_pos: dict[int, int] = {}
             for lbl in sorted(texts_by_label):

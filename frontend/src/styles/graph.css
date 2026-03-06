@@ -1117,6 +1117,22 @@ mark.span-effect {
   flex-shrink: 0;
 }
 
+/* Wrapper for canonical label + optional raw-span subtitle */
+.analyzer-event-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+/* Raw span shown below canonical when they differ */
+.analyzer-span-raw {
+  font-size: 10px;
+  color: #94a3b8;
+  padding-left: 2px;
+  font-style: italic;
+}
+
 .analyzer-corpus-count {
   color: #aaa;
   font-size: 11px;

@@ -30,13 +30,14 @@ export ANTHROPIC_API_KEY=your_key   # or OPENAI_API_KEY
 ## 2. Run the pipeline
 
 ```bash
-# Run all three steps with default config
+# Run all four steps with default config
 python scripts/run_pipeline.py
 
 # Run only a specific step
-python scripts/run_pipeline.py --step 1   # identify causal posts
+python scripts/run_pipeline.py --step 1   # detect causal posts
 python scripts/run_pipeline.py --step 2   # extract (cause, effect) pairs
-python scripts/run_pipeline.py --step 3   # build cluster hierarchy
+python scripts/run_pipeline.py --step 3   # canonize event descriptions
+python scripts/run_pipeline.py --step 4   # build cluster hierarchy
 
 # Use a custom config file
 python scripts/run_pipeline.py --config my-config.yaml
@@ -51,7 +52,7 @@ sqlite3 data/pipeline.db "SELECT level, COUNT(*) FROM clusters GROUP BY level;"
 ```
 
 > [!TIP]
-> Step 1 on 867K titles takes ~2–5 minutes with the regex identifier. Steps 2 and 3 depend on the number of causal posts found (~10–20% of total).
+> Step 1 on 867K titles takes ~2–5 minutes with the regex detector. Steps 2–4 depend on the number of causal posts found (~10–20% of total).
 
 ---
 
@@ -79,8 +80,8 @@ Endpoints:
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `POST /identify` | `{"text": "..."}` | Step 1: classify text as causal or not |
-| `POST /extract` | `{"text": "..."}` | Step 2: extract (cause, effect) pairs with spans |
+| `POST /detect` | `{"text": "..."}` | Step 1: classify text as causal or not |
+| `POST /extract` | `{"text": "..."}` | Steps 2+3: extract and canonize (cause, effect) pairs with spans |
 | `GET /health` | — | Liveness check |
 
 The pipeline server uses the same `config.yaml` implementations as the batch pipeline runner.
@@ -107,13 +108,16 @@ Edit `config.yaml` and change the `implementation` key for any step:
 
 ```yaml
 pipeline:
-  step1_identification:
+  step1_detection:
     implementation: "zero_shot"   # was "regex"
     zero_shot_threshold: 0.80
 
-  step3_hierarchy:
-    implementation: "tfidf_ward"  # was "embedding_hdbscan"
-    tfidf_n_top_clusters: 150
+  step3_canonization:
+    implementation: "llm_anthropic"  # was "passthrough"
+
+  step4_hierarchy:
+    implementation: "embedding_ward"  # was "tfidf_ward"
+    n_clusters_per_level: [500, 100, 30, 8]
 ```
 
 Then re-run the affected steps:
@@ -121,6 +125,7 @@ Then re-run the affected steps:
 ```bash
 python scripts/run_pipeline.py --step 1
 python scripts/run_pipeline.py --step 3
+python scripts/run_pipeline.py --step 4
 ```
 
 No code changes required. The pipeline server picks up the new implementation on next restart.
@@ -129,7 +134,7 @@ No code changes required. The pipeline server picks up the new implementation on
 
 ## Available implementations
 
-### Step 1 — Causality Identification
+### Step 1 — Causality Detection
 
 | Key | Description | Requirements |
 |-----|-------------|--------------|
@@ -146,12 +151,21 @@ No code changes required. The pipeline server picks up the new implementation on
 | `llm_openai` | OpenAI structured JSON extraction | `OPENAI_API_KEY` |
 | `llm_anthropic` | Anthropic structured JSON extraction | `ANTHROPIC_API_KEY` |
 
-### Step 3 — Hierarchy Inference
+### Step 3 — Canonization
 
 | Key | Description | Requirements |
 |-----|-------------|--------------|
-| `embedding_hdbscan` | sentence-transformers + HDBSCAN | `pip install .[dev]` |
+| `passthrough` | Copy extraction spans as-is *(default)* | None |
+| `llm_openai` | LLM rewrites spans into self-contained descriptions | `OPENAI_API_KEY` |
+| `llm_anthropic` | LLM rewrites spans into self-contained descriptions | `ANTHROPIC_API_KEY` |
+
+### Step 4 — Hierarchy Inference
+
+| Key | Description | Requirements |
+|-----|-------------|--------------|
 | `tfidf_ward` | TF-IDF + Ward agglomerative clustering *(default)* | scikit-learn only |
+| `embedding_ward` | sentence-transformers + Ward linkage | `sentence-transformers` |
+| `embedding_hdbscan` | sentence-transformers + HDBSCAN | `pip install .[dev]` |
 | `llm` | LLM-assigned topic labels | API key |
 
 ---

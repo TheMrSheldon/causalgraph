@@ -68,8 +68,13 @@ function ProbTooltip({ rel }: { rel: AnalysisRelation }) {
 // ---------------------------------------------------------------------------
 function RelationRow({ rel, events }: { rel: AnalysisRelation; events: AnalysisEvent[] }) {
   const [showProbs, setShowProbs] = useState(false)
-  const causeEv = events[rel.cause_event_index]
-  const effectEv = events[rel.effect_event_index]
+
+  // Prefer canonical descriptions; fall back to span description / raw text
+  const causeLabel = rel.cause_canonical || events[rel.cause_event_index]?.description || rel.cause_text
+  const effectLabel = rel.effect_canonical || events[rel.effect_event_index]?.description || rel.effect_text
+  // Show raw span as secondary only when it meaningfully differs from the canonical
+  const causeRaw = rel.cause_text.toLowerCase() !== causeLabel.toLowerCase() ? rel.cause_text : null
+  const effectRaw = rel.effect_text.toLowerCase() !== effectLabel.toLowerCase() ? rel.effect_text : null
 
   return (
     <div
@@ -78,15 +83,21 @@ function RelationRow({ rel, events }: { rel: AnalysisRelation; events: AnalysisE
       onMouseLeave={() => setShowProbs(false)}
     >
       <span className="analyzer-relation-row">
-        <mark className="span-cause" style={{ background: eventColor(rel.cause_event_index) }}>
-          {causeEv?.description ?? rel.cause_text}
-        </mark>
+        <span className="analyzer-event-cell">
+          <mark className="span-cause" style={{ background: eventColor(rel.cause_event_index) }}>
+            {causeLabel}
+          </mark>
+          {causeRaw && <span className="analyzer-span-raw">{causeRaw}</span>}
+        </span>
         <span className="analyzer-relation-arrow" title={rel.is_countercausal ? 'refuted' : 'causes'}>
           {rel.is_countercausal ? '↛' : '→'}
         </span>
-        <mark className="span-effect" style={{ background: eventColor(rel.effect_event_index) }}>
-          {effectEv?.description ?? rel.effect_text}
-        </mark>
+        <span className="analyzer-event-cell">
+          <mark className="span-effect" style={{ background: eventColor(rel.effect_event_index) }}>
+            {effectLabel}
+          </mark>
+          {effectRaw && <span className="analyzer-span-raw">{effectRaw}</span>}
+        </span>
         {rel.is_countercausal && <span className="countercausal-badge">refuted</span>}
       </span>
       {showProbs && <ProbTooltip rel={rel} />}

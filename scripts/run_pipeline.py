@@ -29,9 +29,9 @@ def main() -> None:
     parser.add_argument(
         "--step",
         type=int,
-        choices=[1, 2, 3],
+        choices=[1, 2, 3, 4],
         default=None,
-        help="Run only a specific step (1=identify, 2=extract, 3=cluster). Omit to run all.",
+        help="Run only a specific step (1=detect, 2=extract, 3=canonize, 4=cluster). Omit to run all.",
     )
     args = parser.parse_args()
     run_all(config_path=args.config, step=args.step)

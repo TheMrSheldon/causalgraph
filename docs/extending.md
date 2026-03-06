@@ -4,23 +4,23 @@
 
 Each pipeline step has a corresponding Python `Protocol` in `pipeline/protocols.py`. To add a new implementation:
 
-### Example: new Step 1 identifier
+### Example: new Step 1 detector
 
 **1. Create the class**
 
 ```python
-# pipeline/step1_identification/my_identifier.py
-from pipeline.protocols import CausalityIdentifier, Post
+# pipeline/step1_detection/my_detector.py
+from pipeline.protocols import CausalityDetector, Post
 
-class MyIdentifier:
+class MyDetector:
     def __init__(self, my_param: float = 0.5, **kwargs) -> None:
         self.threshold = my_param
 
     @property
     def name(self) -> str:
-        return "my_identifier"
+        return "my_detector"
 
-    def identify(self, posts: list[Post]) -> list[Post]:
+    def detect(self, posts: list[Post]) -> list[Post]:
         # Your logic here
         return [p for p in posts if self._is_causal(p.title)]
 
@@ -38,9 +38,9 @@ In `pipeline/registry.py`, add an entry to `_STEP1_REGISTRY`:
 ```python
 _STEP1_REGISTRY: dict[str, tuple[str, str]] = {
     ...
-    "my_identifier": (
-        "pipeline.step1_identification.my_identifier",
-        "MyIdentifier",
+    "my_detector": (
+        "pipeline.step1_detection.my_detector",
+        "MyDetector",
     ),
 }
 ```
@@ -51,8 +51,8 @@ In `config.yaml`:
 
 ```yaml
 pipeline:
-  step1_identification:
-    implementation: "my_identifier"
+  step1_detection:
+    implementation: "my_detector"
     my_param: 0.8
 ```
 
@@ -61,6 +61,40 @@ pipeline:
 The registry validates Protocol conformance at load time using `isinstance()` on the `@runtime_checkable` Protocol. If your class is missing required methods, you'll get a `TypeError` immediately.
 
 The new implementation is automatically available in the pipeline server (`uvicorn pipeline.server:app`) without any changes — it uses the same `config.yaml`.
+
+---
+
+### Example: new Step 3 canonizer
+
+**1. Create the class**
+
+```python
+# pipeline/step3_canonization/my_canonizer.py
+from pipeline.protocols import CausalRelation, EventCanonizer
+import dataclasses
+
+class MyCanonizer:
+    def __init__(self, **kwargs) -> None:
+        pass
+
+    @property
+    def name(self) -> str:
+        return "my_canonizer"
+
+    def canonize(self, relations: list[CausalRelation]) -> list[CausalRelation]:
+        result = []
+        for r in relations:
+            canonical_cause = self._enrich(r.cause_text, r.post_id)
+            canonical_effect = self._enrich(r.effect_text, r.post_id)
+            result.append(dataclasses.replace(
+                r,
+                cause_canonical=canonical_cause,
+                effect_canonical=canonical_effect,
+            ))
+        return result
+```
+
+**2. Register and configure** (same pattern as above, using `_STEP3_REGISTRY` and `step3_canonization` config key).
 
 ---
 
@@ -85,6 +119,8 @@ classDiagram
         +effect_text: str
         +cause_norm: str
         +effect_norm: str
+        +cause_canonical: str
+        +effect_canonical: str
         +confidence: float
         +extractor: str
     }
@@ -97,15 +133,21 @@ classDiagram
         +clusterer: str
     }
 
-    class CausalityIdentifier {
+    class CausalityDetector {
         <<Protocol>>
-        +identify(posts) list[Post]
+        +detect(posts) list[Post]
         +name: str
     }
 
     class CausalExtractor {
         <<Protocol>>
         +extract(post) list[CausalRelation]
+        +name: str
+    }
+
+    class EventCanonizer {
+        <<Protocol>>
+        +canonize(relations) list[CausalRelation]
         +name: str
     }
 
@@ -116,6 +158,19 @@ classDiagram
     }
 ```
 
+### `CausalRelation` fields
+
+| Field | Set by | Purpose |
+|-------|--------|---------|
+| `cause_text` | Step 2 (Extractor) | Raw extracted span from title |
+| `effect_text` | Step 2 (Extractor) | Raw extracted span from title |
+| `cause_norm` | Step 2 (Extractor) | Lowercased/lemmatized, used as dedup key |
+| `effect_norm` | Step 2 (Extractor) | Lowercased/lemmatized, used as dedup key |
+| `cause_canonical` | Step 3 (Canonizer) | Self-contained description for clustering/display |
+| `effect_canonical` | Step 3 (Canonizer) | Self-contained description for clustering/display |
+
+Step 4 (Hierarchy) uses `cause_canonical`/`effect_canonical` (falling back to `cause_text`/`effect_text` or `cause_norm` if empty) as the text to embed or vectorize.
+
 ### `HierarchyInferrer.infer()` return value
 
 ```python
@@ -125,7 +180,7 @@ memberships: list[tuple[int, int, str, str]]
 # - relation_index: position in the input `relations` list
 # - cluster_index:  position in the returned `clusters` list
 # - role:           'cause' or 'effect'
-# - event_text:     the normalized event phrase
+# - event_text:     the normalized event phrase (cause_norm / effect_norm)
 ```
 
 The `Database.insert_memberships()` method resolves these indices to actual DB row IDs.

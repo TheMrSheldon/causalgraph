@@ -11,17 +11,18 @@ flowchart LR
     A[(rscience-submissions.parquet\n867K titles)] -->|DuckDB stream| B
 
     subgraph Pipeline["Pipeline (offline)"]
-        B[Step 1\nCausality Identification] -->|causal posts| C
+        B[Step 1\nCausality Detection] -->|causal posts| C
         C[Step 2\nCausal Extraction] -->|cause / effect pairs| D
-        D[Step 3\nHierarchy Inference] -->|clustered graph| E
+        D[Step 3\nCanonicalization] -->|self-contained descriptions| E
+        E[Step 4\nHierarchy Inference] -->|clustered graph| F
     end
 
-    E[(pipeline.db\nSQLite)] -->|read-only| F
-    E -->|schema contract| G
+    F[(pipeline.db\nSQLite)] -->|read-only| G
+    F -->|schema contract| H
 
     subgraph Services["Runtime Services"]
-        F[Backend API\nport 8000] -->|JSON| H[React + Cytoscape.js\nport 5173]
-        G[Pipeline Server\nport 8001] -->|JSON| H
+        G[Backend API\nport 8000] -->|JSON| I[React + Cytoscape.js\nport 5173]
+        H[Pipeline Server\nport 8001] -->|JSON| I
     end
 ```
 
@@ -36,9 +37,10 @@ The backend API (`api/`) and the pipeline (`pipeline/`) share **no Python import
 | Component | Responsibility | Key Files |
 |-----------|----------------|-----------|
 | `ParquetReader` | Stream 867K rows from Parquet in batches | `pipeline/parquet_reader.py` |
-| `CausalityIdentifier` | Filter titles to those expressing causality | `pipeline/step1_identification/` |
+| `CausalityDetector` | Filter titles to those expressing causality | `pipeline/step1_detection/` |
 | `CausalExtractor` | Extract structured (cause, effect) pairs | `pipeline/step2_extraction/` |
-| `HierarchyInferrer` | Cluster events into 3-level hierarchy | `pipeline/step3_hierarchy/` |
+| `EventCanonizer` | Rewrite event spans into self-contained descriptions | `pipeline/step3_canonization/` |
+| `HierarchyInferrer` | Cluster events into multi-level hierarchy | `pipeline/step4_hierarchy/` |
 | `Database` (pipeline) | SQLite DAL — schema, writes, graph queries | `pipeline/db.py` |
 | `GraphDatabase` (API) | Read-only SQLite access for graph queries | `api/db.py` |
 | `Registry` | Load implementations from `config.yaml` | `pipeline/registry.py` |
@@ -53,9 +55,10 @@ The backend API (`api/`) and the pipeline (`pipeline/`) share **no Python import
 ```mermaid
 sequenceDiagram
     participant P as Parquet File
-    participant S1 as Step 1<br/>Identifier
+    participant S1 as Step 1<br/>Detector
     participant S2 as Step 2<br/>Extractor
-    participant S3 as Step 3<br/>Inferrer
+    participant S3 as Step 3<br/>Canonizer
+    participant S4 as Step 4<br/>Inferrer
     participant DB as SQLite DB
     participant API as Backend API
     participant PS as Pipeline Server
@@ -66,7 +69,9 @@ sequenceDiagram
     DB->>S2: all causal Posts
     S2-->>DB: CausalRelation rows
     DB->>S3: all CausalRelations
-    S3-->>DB: EventCluster rows + memberships
+    S3-->>DB: canonical descriptions (UPDATE)
+    DB->>S4: all CausalRelations (with canonical)
+    S4-->>DB: EventCluster rows + memberships
 
     UI->>API: GET /api/graph
     API->>DB: get_clusters_at_level() + get_edges()
@@ -110,6 +115,8 @@ erDiagram
         TEXT effect_text
         TEXT cause_norm
         TEXT effect_norm
+        TEXT cause_canonical
+        TEXT effect_canonical
         REAL confidence
         TEXT extractor
         INTEGER is_countercausal
@@ -157,9 +164,9 @@ Each pipeline step is defined as a Python `Protocol` (structural typing). Swap i
 
 ```mermaid
 classDiagram
-    class CausalityIdentifier {
+    class CausalityDetector {
         <<Protocol>>
-        +identify(posts: list[Post]) list[Post]
+        +detect(posts: list[Post]) list[Post]
         +name: str
     }
 
@@ -169,20 +176,29 @@ classDiagram
         +name: str
     }
 
+    class EventCanonizer {
+        <<Protocol>>
+        +canonize(relations: list[CausalRelation]) list[CausalRelation]
+        +name: str
+    }
+
     class HierarchyInferrer {
         <<Protocol>>
         +infer(relations: list[CausalRelation]) tuple
         +name: str
     }
 
-    CausalityIdentifier <|.. RegexIdentifier : implements
-    CausalityIdentifier <|.. LLMIdentifier : implements
-    CausalityIdentifier <|.. ZeroShotIdentifier : implements
+    CausalityDetector <|.. RegexDetector : implements
+    CausalityDetector <|.. LLMDetector : implements
+    CausalityDetector <|.. ZeroShotDetector : implements
 
     CausalExtractor <|.. RegexSpacyExtractor : implements
     CausalExtractor <|.. LLMExtractor : implements
 
-    HierarchyInferrer <|.. EmbeddingClusterer : implements
+    EventCanonizer <|.. PassthroughCanonizer : implements
+    EventCanonizer <|.. LLMCanonizer : implements
+
+    HierarchyInferrer <|.. EmbeddingWardClusterer : implements
     HierarchyInferrer <|.. TFIDFClusterer : implements
     HierarchyInferrer <|.. LLMTopicGrouper : implements
 ```
@@ -191,12 +207,12 @@ classDiagram
 
 ## Hierarchy Model
 
-Events are organized into a 3-level tree. The frontend renders the topmost level on load and supports drill-down via double-click.
+Events are organized into a multi-level tree. The number of levels is configured via `n_clusters_per_level` in `config.yaml` — the list length determines the number of levels. The frontend renders the topmost level on load and supports drill-down via double-click.
 
 ```mermaid
 graph TD
-    T1["Level 2 — Top\n(20–50 nodes)\ne.g. 'cardiovascular / cancer'"]
-    T2["Level 2 — Top\n'mental / cognitive'"]
+    T1["Level N — Top\n(10–50 nodes)\ne.g. 'cardiovascular / cancer'"]
+    T2["Level N — Top\n'mental / cognitive'"]
 
     M1["Level 1 — Mid\n'heart / blood / pressure'"]
     M2["Level 1 — Mid\n'cancer / tumor / cell'"]
@@ -247,7 +263,7 @@ graph LR
 
 | Endpoint | Body | Purpose |
 |----------|------|---------|
-| `POST /identify` | `{"text": "..."}` | Classify text as causal (`is_causal: bool`) |
+| `POST /detect` | `{"text": "..."}` | Classify text as causal (`is_causal: bool`) |
 | `POST /extract` | `{"text": "..."}` | Extract events and relations with character spans |
 | `GET /health` | — | Liveness check |
 
@@ -278,4 +294,4 @@ The Cytoscape.js graph uses **compound nodes** to represent expanded clusters. W
 
 Collapsing removes child elements and resets the parent to a regular node.
 
-The graph layout algorithm can be changed in the Settings panel (defaults to `fcose`). Available built-in options: `fcose`, `cose`, `breadthfirst`, `concentric`, `circle`.
+The graph layout algorithm can be changed in the Settings panel (gear icon). Available built-in options: `fcose`, `cose`, `breadthfirst`, `concentric`, `circle`.

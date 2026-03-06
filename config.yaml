@@ -4,7 +4,7 @@ pipeline:
   batch_size: 5000        # Posts per batch for step 1
   min_score: 1            # Skip posts with score below this
 
-  step1_identification:
+  step1_detection:
     implementation: "regex"       # Options: regex | llm_openai | llm_anthropic | zero_shot
 
     # Zero-shot options (only used when implementation = zero_shot)
@@ -23,27 +23,39 @@ pipeline:
     llm_model: "claude-haiku-4-5-20251001"
     llm_max_tokens: 512
 
-  step3_hierarchy:
-    implementation: "tfidf_ward"  # Options: embedding_hdbscan | tfidf_ward | embedding_ward | llm
-    n_levels: 3                          # Number of hierarchy levels to build
+  step3_canonization:
+    implementation: "transformer"   # Options: passthrough | transformer | llm_openai | llm_anthropic
 
-    # Embedding options (only used when implementation = embedding_hdbscan)
+    # Transformer options (only used when implementation = transformer)
+    model_name: "google/flan-t5-base"  # Any HuggingFace text2text-generation model
+    batch_size: 64                     # Prompts per batch; increase for GPU
+    max_new_tokens: 20                 # Max output length; event spans are short
+    device: -1                         # -1 = CPU; 0 = first CUDA GPU
+    fast_path: true                    # Skip model for already-self-contained spans
+
+    # LLM options (only used when implementation = llm_*)
+    llm_model: "claude-haiku-4-5-20251001"
+    llm_batch_size: 50
+    llm_max_tokens: 1024
+
+  step4_hierarchy:
+    implementation: "embedding_ward"  # Options: embedding_hdbscan | tfidf_ward | embedding_ward | llm
+
+    # Embedding + Ward linkage options (used when implementation = embedding_ward)
     embedding_model: "all-MiniLM-L6-v2"
-    min_cluster_size: 10
-    min_samples: 5
+    linkage_method: "ward"
+    n_clusters_per_level: [500, 100, 20]  # clusters at each level, finest → coarsest
+                                           # list length = number of levels (no upper limit)
+    max_texts: 8000    # O(n^2) memory cap; texts beyond this assigned by nearest centroid
+    use_norm: false    # false = embed canonical description; true = embed lowercased norm
 
     # TF-IDF options (only used when implementation = tfidf_ward)
     tfidf_max_features: 5000
     tfidf_n_top_clusters: 200
 
-    # Embedding + Ward linkage options (only used when implementation = embedding_ward)
-    # embedding_model: "all-MiniLM-L6-v2"  # shared with embedding_hdbscan
-    # linkage_method: "ward"                # ward | complete | average
-    # n_clusters_per_level: [300, 60, 15]  # clusters at each level, finest → coarsest
-    #                                       # list length = number of levels (no upper limit)
-    #                                       # e.g. [500, 150, 40, 10] gives 4 levels
-    # max_texts: 8000    # O(n^2) memory cap; texts beyond this are assigned by nearest centroid
-    # use_norm: false    # false = embed raw cause/effect text; true = embed lowercased/lemmatised norm
+    # Embedding HDBSCAN options (only used when implementation = embedding_hdbscan)
+    min_cluster_size: 10
+    min_samples: 5
 
     # LLM options (only used when implementation = llm)
     llm_model: "claude-haiku-4-5-20251001"
