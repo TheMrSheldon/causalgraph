@@ -191,6 +191,14 @@ function buildCytoscapeStyle(settings: GraphSettings): StylesheetStyle[] {
       selector: '.dimmed',
       style: { opacity: 0.15 },
     },
+    {
+      selector: 'node.focus-dimmed',
+      style: { opacity: 0.06, events: 'no' } as AnyStyle,
+    },
+    {
+      selector: 'edge.focus-dimmed',
+      style: { opacity: 0 },
+    },
   ]
 }
 
@@ -292,8 +300,13 @@ export function CausalGraph({
   const prevNodesRef = useRef<ClusterNode[]>([])
   const prevEdgesRef = useRef<GraphEdge[]>([])
   const [contextMenu, setContextMenu] = useState<{
-    x: number; y: number; clusterId: number; level: number
+    x: number; y: number; clusterId: number; level: number; label: string
   } | null>(null)
+  const [focusStack, setFocusStack] = useState<Array<{ id: number; label: string; level: number }>>([])
+  const focusStackRef = useRef(focusStack)
+  useEffect(() => { focusStackRef.current = focusStack }, [focusStack])
+  // Nodes that were expanded automatically on focus entry (so we can collapse on exit)
+  const focusAutoExpandedRef = useRef<Set<number>>(new Set())
 
   // Keep refs current
   useEffect(() => { settingsRef.current = settings }, [settings])
@@ -313,6 +326,63 @@ export function CausalGraph({
     outgoing.addClass('edge-outgoing')
     incoming.addClass('edge-incoming')
   }, [])
+
+  // Apply focus: ghost non-children nodes, hide non-children edges, zoom to focused subset
+  const applyFocus = useCallback((focusedId: number, animate = true) => {
+    const cy = cyRef.current
+    if (!cy) return
+    const children = childNodesByParentRef.current.get(focusedId)
+    const childIds: Set<string> = children && children.length > 0
+      ? new Set(children.map((c) => `cluster-${c.id}`))
+      : new Set([`cluster-${focusedId}`])
+    cy.nodes().forEach((n) => {
+      if (childIds.has(n.id())) n.removeClass('focus-dimmed')
+      else n.addClass('focus-dimmed')
+    })
+    cy.edges().forEach((e) => {
+      const inFocus = childIds.has(e.source().id()) && childIds.has(e.target().id())
+      if (inFocus) e.removeClass('focus-dimmed')
+      else e.addClass('focus-dimmed')
+    })
+    const focusedEles = cy.nodes().filter((n) => childIds.has(n.id()))
+    if (focusedEles.length > 0) {
+      cy.animate({ fit: { eles: focusedEles, padding: 80 } as cytoscape.Fit, duration: animate ? 400 : 0 })
+    }
+  }, [])
+
+  const clearFocus = useCallback((animate = true) => {
+    const cy = cyRef.current
+    if (!cy) return
+    cy.elements().removeClass('focus-dimmed')
+    cy.animate({ fit: { eles: cy.elements(), padding: 60 } as cytoscape.Fit, duration: animate ? 400 : 0 })
+  }, [])
+
+  // Pop one focus level; collapse the node if it was auto-expanded by focus entry
+  const exitFocus = useCallback(() => {
+    const stack = focusStackRef.current
+    if (stack.length === 0) return
+    const last = stack[stack.length - 1]
+    if (focusAutoExpandedRef.current.has(last.id)) {
+      focusAutoExpandedRef.current.delete(last.id)
+      onNodeRightClick(last.id)
+    }
+    setFocusStack((s) => s.slice(0, -1))
+  }, [onNodeRightClick])
+
+  // Clear entire focus stack; collapse all auto-expanded nodes
+  const clearAllFocus = useCallback(() => {
+    for (const id of focusAutoExpandedRef.current) {
+      onNodeRightClick(id)
+    }
+    focusAutoExpandedRef.current.clear()
+    setFocusStack([])
+  }, [onNodeRightClick])
+
+  // Re-apply current focus whenever the stack changes (with animation)
+  useEffect(() => {
+    if (focusStack.length === 0) clearFocus(true)
+    else applyFocus(focusStack[focusStack.length - 1].id, true)
+  }, [focusStack, applyFocus, clearFocus])
 
   // Highlight all children of an expanded parent (parent not in graph)
   const applyChildrenHighlight = useCallback((parentId: number) => {
@@ -344,6 +414,9 @@ export function CausalGraph({
       userZoomingEnabled: true,
       userPanningEnabled: true,
       boxSelectionEnabled: false,
+      zoomingFactor: 0.05,   // each scroll step changes zoom by 5% (near-linear feel)
+      minZoom: 0.1,
+      maxZoom: 5,
     })
 
     return () => {
@@ -369,8 +442,9 @@ export function CausalGraph({
       evt.originalEvent.preventDefault()
       const id = parseInt(evt.target.id().replace('cluster-', ''), 10)
       const level = evt.target.data('level') as number
+      const label = evt.target.data('label') as string
       const { clientX, clientY } = evt.originalEvent as MouseEvent
-      setContextMenu({ x: clientX, y: clientY, clusterId: id, level })
+      setContextMenu({ x: clientX, y: clientY, clusterId: id, level, label })
     })
 
     cy.on('tap', 'node', (evt) => {
@@ -493,6 +567,10 @@ export function CausalGraph({
         applyChildrenHighlight(sel)
       }
     }
+
+    // Re-apply focus after element changes (no animation — elements already positioned)
+    const fs = focusStackRef.current
+    if (fs.length > 0) applyFocus(fs[fs.length - 1].id, false)
   }, [nodes, edges, expandedNodes, childNodesByParent, childEdgesByParent]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Dismiss context menu on outside click
@@ -539,9 +617,58 @@ export function CausalGraph({
               Collapse sub-clusters
             </button>
           )}
-          {!canExpand && !canCollapse && (
-            <span className="node-context-empty">No actions available</span>
+          {(canExpand || canCollapse) && <div className="node-context-separator" />}
+          <button className="node-context-item" onClick={() => {
+            const { clusterId, level, label } = contextMenu
+            const alreadyExpanded = expandedNodes.has(clusterId)
+            setFocusStack((s) => [...s, { id: clusterId, label, level }])
+            if (level > 0 && !alreadyExpanded) {
+              onNodeDblClick(clusterId, level)
+              focusAutoExpandedRef.current.add(clusterId)
+            }
+            setContextMenu(null)
+          }}>
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <circle cx="10" cy="10" r="7"/>
+              <line x1="10" y1="1" x2="10" y2="5"/>
+              <line x1="10" y1="15" x2="10" y2="19"/>
+              <line x1="1" y1="10" x2="5" y2="10"/>
+              <line x1="15" y1="10" x2="19" y2="10"/>
+            </svg>
+            Focus on this cluster
+          </button>
+          {focusStack.length > 0 && (
+            <button className="node-context-item" onClick={() => {
+              clearAllFocus()
+              setContextMenu(null)
+            }}>
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="4" y1="4" x2="16" y2="16"/><line x1="16" y1="4" x2="4" y2="16"/></svg>
+              Clear all focus
+            </button>
           )}
+        </div>
+      )}
+
+      {focusStack.length > 0 && (
+        <div className="focus-banner">
+          <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ flexShrink: 0 }}>
+            <circle cx="10" cy="10" r="7"/>
+            <line x1="10" y1="1" x2="10" y2="5"/>
+            <line x1="10" y1="15" x2="10" y2="19"/>
+            <line x1="1" y1="10" x2="5" y2="10"/>
+            <line x1="15" y1="10" x2="19" y2="10"/>
+          </svg>
+          <span className="focus-banner-label">
+            {focusStack[focusStack.length - 1].label}
+            {focusStack.length > 1 && <span className="focus-banner-depth"> ({focusStack.length} levels)</span>}
+          </span>
+          <button
+            className="focus-banner-exit"
+            title="Exit this focus level"
+            onClick={exitFocus}
+          >
+            ✕
+          </button>
         </div>
       )}
 

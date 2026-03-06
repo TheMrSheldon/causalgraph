@@ -676,6 +676,62 @@ mark.span-effect {
   font-size: 12px;
 }
 
+.node-context-separator {
+  height: 1px;
+  background: var(--webis-border);
+  margin: 3px 0;
+}
+
+/* ── Focus mode banner ───────────────────────────────────────────────── */
+
+.focus-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(30, 135, 240, 0.90);
+  color: #fff;
+  padding: 5px 10px 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+  pointer-events: auto;
+  white-space: nowrap;
+  max-width: 60%;
+}
+
+.focus-banner-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.focus-banner-depth {
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+.focus-banner-exit {
+  background: rgba(255, 255, 255, 0.18);
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 5px;
+  flex-shrink: 0;
+}
+
+.focus-banner-exit:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
 /* ── Graph legend (inside graph canvas) ──────────────────────────────── */
 
 .graph-legend {
