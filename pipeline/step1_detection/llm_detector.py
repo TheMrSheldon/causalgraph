@@ -1,5 +1,5 @@
 """
-Step 1 alternative: LLM-based causality identification.
+Step 1 alternative: LLM-based causality detection.
 
 Supports both OpenAI and Anthropic APIs via the 'provider' kwarg.
 Batches titles to minimize API calls (50 titles per request by default).
@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import os
 
-from pipeline.protocols import CausalityIdentifier, Post
+from pipeline.protocols import CausalityDetector, Post
 
 _SYSTEM_PROMPT = """You are a scientific text classifier. Given a list of r/science submission titles,
 identify which ones express a causal relationship — either explicit (e.g., "X causes Y") or
@@ -22,9 +22,9 @@ _USER_TEMPLATE = """Titles (JSON array):
 Return only a JSON array of integer indices of causal titles. Example: [0, 2, 5]"""
 
 
-class LLMIdentifier:
+class LLMDetector:
     """
-    Implements CausalityIdentifier using an LLM API.
+    Implements CausalityDetector using an LLM API.
     Set OPENAI_API_KEY or ANTHROPIC_API_KEY in environment.
     """
 
@@ -44,7 +44,7 @@ class LLMIdentifier:
     def name(self) -> str:
         return f"llm_{self._provider}"
 
-    def identify(self, posts: list[Post]) -> list[Post]:
+    def detect(self, posts: list[Post]) -> list[Post]:
         causal: list[Post] = []
         for i in range(0, len(posts), self.batch_size):
             batch = posts[i : i + self.batch_size]
@@ -60,7 +60,7 @@ class LLMIdentifier:
                 return self._call_anthropic(user_msg)
             return self._call_openai(user_msg)
         except Exception as e:
-            print(f"[LLMIdentifier] API error: {e}. Returning empty for this batch.")
+            print(f"[LLMDetector] API error: {e}. Returning empty for this batch.")
             return []
 
     def _call_anthropic(self, user_msg: str) -> list[int]:
@@ -89,7 +89,6 @@ class LLMIdentifier:
         )
         text = response.choices[0].message.content.strip()
         data = json.loads(text)
-        # Handle both {"indices": [...]} and bare [...]
         if isinstance(data, list):
             return data
         return data.get("indices", [])

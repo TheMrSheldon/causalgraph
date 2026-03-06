@@ -1,5 +1,5 @@
 """
-Protocol definitions for the three pluggable pipeline steps.
+Protocol definitions for the four pluggable pipeline steps.
 
 Each concrete implementation must satisfy structural subtyping (duck typing).
 Use @runtime_checkable so the registry can validate conformance with isinstance().
@@ -31,6 +31,15 @@ class Post:
 class CausalRelation:
     """
     One extracted (cause, effect) pair tied to its source post.
+
+    cause_text / effect_text   — raw phrase as extracted from the title
+    cause_norm / effect_norm   — lowercased/stripped form used as a stable
+                                 deduplication key across the pipeline
+    cause_canonical / effect_canonical — self-contained event description
+                                 produced by Step 3 (canonization). Empty
+                                 until that step runs; hierarchy falls back
+                                 to cause_text when this is empty.
+
     confidence=1.0 for deterministic (rule-based) extractors.
     is_countercausal=True when the title explicitly negates the causal claim
     (e.g. "X does not cause Y", "no link between X and Y").
@@ -42,11 +51,15 @@ class CausalRelation:
     post_id: str
     cause_text: str
     effect_text: str
-    cause_norm: str       # lowercased / lemmatized for dedup
+    cause_norm: str       # lowercased / stripped for dedup
     effect_norm: str
     confidence: float = 1.0
     extractor: str = ""
     is_countercausal: bool = False
+    cause_canonical: str = ""   # self-contained description (from Step 3)
+    effect_canonical: str = ""  # self-contained description (from Step 3)
+    post_title: str = ""        # title of the source post — context for canonization
+                                # populated at runtime; NOT persisted in DB
     # Per-label prediction certainty (not stored in DB)
     p_none: float = 0.0
     p_causal: float = 0.0
@@ -58,7 +71,7 @@ class EventCluster:
     """
     A node in the hierarchy graph.
     parent_id=None → top-level cluster.
-    level: 0=leaf, 1=mid, 2=top.
+    level: 0=leaf, 1=mid, 2=top (or higher for deeper hierarchies).
     """
     label: str
     level: int
@@ -68,22 +81,22 @@ class EventCluster:
 
 
 # ---------------------------------------------------------------------------
-# Step 1: Causality Identification
+# Step 1: Causality Detection
 # ---------------------------------------------------------------------------
 
 @runtime_checkable
-class CausalityIdentifier(Protocol):
+class CausalityDetector(Protocol):
     """
     Scans a batch of Post objects and returns those that express
     a causal relationship (explicit or implicit).
 
     Implementations:
-      - RegexIdentifier      (pipeline.step1_identification.regex_identifier)
-      - LLMIdentifier        (pipeline.step1_identification.llm_identifier)
-      - ZeroShotIdentifier   (pipeline.step1_identification.zero_shot_identifier)
+      - RegexDetector      (pipeline.step1_detection.regex_detector)
+      - LLMDetector        (pipeline.step1_detection.llm_detector)
+      - ZeroShotDetector   (pipeline.step1_detection.zero_shot_detector)
     """
 
-    def identify(self, posts: list[Post]) -> list[Post]:
+    def detect(self, posts: list[Post]) -> list[Post]:
         """
         Args:
             posts: A batch of Post objects (typically 1000–5000 at a time).
@@ -123,6 +136,8 @@ class CausalExtractor(Protocol):
         Returns:
             One or more CausalRelation objects. Returns empty list only
             if extraction genuinely fails (do not raise).
+            cause_canonical / effect_canonical are left empty here;
+            they are filled by Step 3 (canonization).
         """
         ...
 
@@ -133,7 +148,44 @@ class CausalExtractor(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# Step 3: Hierarchy Inference
+# Step 3: Event Canonization
+# ---------------------------------------------------------------------------
+
+@runtime_checkable
+class EventCanonizer(Protocol):
+    """
+    Takes a list of CausalRelation objects (with raw cause/effect texts) and
+    returns them with cause_canonical / effect_canonical filled in.
+
+    The canonical description should be a self-contained phrase that makes
+    sense without the surrounding sentence — e.g. resolving pronouns,
+    expanding abbreviations, or reformulating truncated spans using the
+    original post title as context.
+
+    Implementations:
+      - PassthroughCanonizer  (pipeline.step3_canonization.passthrough_canonizer)
+      - LLMCanonizer          (pipeline.step3_canonization.llm_canonizer)
+    """
+
+    def canonize(self, relations: list[CausalRelation]) -> list[CausalRelation]:
+        """
+        Args:
+            relations: Extracted CausalRelation objects (cause_canonical empty).
+
+        Returns:
+            The same relations with cause_canonical / effect_canonical set.
+            Implementations should return new objects (or mutate in place).
+        """
+        ...
+
+    @property
+    def name(self) -> str:
+        """Unique registry key, e.g. 'passthrough', 'llm_anthropic'."""
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Step 4: Hierarchy Inference
 # ---------------------------------------------------------------------------
 
 @runtime_checkable
@@ -143,9 +195,10 @@ class HierarchyInferrer(Protocol):
     into a multi-level cluster hierarchy.
 
     Implementations:
-      - EmbeddingClusterer  (pipeline.step3_hierarchy.embedding_clusterer)
-      - TFIDFClusterer      (pipeline.step3_hierarchy.tfidf_clusterer)
-      - LLMTopicGrouper     (pipeline.step3_hierarchy.llm_topic_grouper)
+      - EmbeddingClusterer    (pipeline.step4_hierarchy.embedding_clusterer)
+      - TFIDFClusterer        (pipeline.step4_hierarchy.tfidf_clusterer)
+      - EmbeddingWardClusterer(pipeline.step4_hierarchy.embedding_ward_clusterer)
+      - LLMTopicGrouper       (pipeline.step4_hierarchy.llm_topic_grouper)
     """
 
     def infer(
@@ -154,7 +207,7 @@ class HierarchyInferrer(Protocol):
     ) -> tuple[list[EventCluster], list[tuple[int, int, str, str]]]:
         """
         Args:
-            relations: All extracted causal relations.
+            relations: All extracted causal relations (with canonical fields set).
 
         Returns:
             A tuple of:

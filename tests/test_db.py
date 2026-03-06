@@ -96,6 +96,6 @@ def test_get_post_by_id_missing(tmp_db):
 
 
 def test_pipeline_run_tracking(tmp_db):
-    run_id = tmp_db.start_run("identification", "regex", rows_in=1000)
+    run_id = tmp_db.start_run("detection", "regex", rows_in=1000)
     assert isinstance(run_id, int)
     tmp_db.finish_run(run_id, rows_out=150)

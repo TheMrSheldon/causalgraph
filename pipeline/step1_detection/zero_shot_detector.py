@@ -6,15 +6,15 @@ Runs locally (no API cost) but requires ~1.5GB model download.
 """
 from __future__ import annotations
 
-from pipeline.protocols import CausalityIdentifier, Post
+from pipeline.protocols import CausalityDetector, Post
 
 _DEFAULT_LABELS = ["causal relationship", "no causal relationship"]
 _DEFAULT_HYPOTHESIS = "This title describes a cause-and-effect relationship."
 
 
-class ZeroShotIdentifier:
+class ZeroShotDetector:
     """
-    Implements CausalityIdentifier using HuggingFace zero-shot classification.
+    Implements CausalityDetector using HuggingFace zero-shot classification.
     Lazy-loads the model on first call.
     """
 
@@ -34,7 +34,7 @@ class ZeroShotIdentifier:
             self._pipeline = pipeline(
                 "zero-shot-classification",
                 model=self.model_name,
-                device=-1,  # CPU; set to 0 for GPU
+                device=-1,
             )
         return self._pipeline
 
@@ -42,7 +42,7 @@ class ZeroShotIdentifier:
     def name(self) -> str:
         return "zero_shot"
 
-    def identify(self, posts: list[Post]) -> list[Post]:
+    def detect(self, posts: list[Post]) -> list[Post]:
         if not posts:
             return []
         clf = self._get_pipeline()
@@ -51,7 +51,6 @@ class ZeroShotIdentifier:
 
         causal: list[Post] = []
         for post, result in zip(posts, results):
-            # result["labels"][0] is the top label
             top_label = result["labels"][0]
             top_score = result["scores"][0]
             if top_label == "causal relationship" and top_score >= self.threshold:

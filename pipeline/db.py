@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS causal_relations (
     effect_text       TEXT NOT NULL,
     cause_norm        TEXT NOT NULL,
     effect_norm       TEXT NOT NULL,
+    cause_canonical   TEXT NOT NULL DEFAULT '',
+    effect_canonical  TEXT NOT NULL DEFAULT '',
     confidence        REAL NOT NULL DEFAULT 1.0,
     extractor         TEXT NOT NULL DEFAULT '',
     is_countercausal  INTEGER NOT NULL DEFAULT 0,
@@ -152,6 +154,10 @@ class Database:
             existing = {r[1] for r in conn.execute("PRAGMA table_info(causal_relations)").fetchall()}
             if "is_countercausal" not in existing:
                 conn.execute("ALTER TABLE causal_relations ADD COLUMN is_countercausal INTEGER NOT NULL DEFAULT 0")
+            if "cause_canonical" not in existing:
+                conn.execute("ALTER TABLE causal_relations ADD COLUMN cause_canonical TEXT NOT NULL DEFAULT ''")
+            if "effect_canonical" not in existing:
+                conn.execute("ALTER TABLE causal_relations ADD COLUMN effect_canonical TEXT NOT NULL DEFAULT ''")
             existing_le = {r[1] for r in conn.execute("PRAGMA table_info(leaf_edges)").fetchall()}
             if "countercausal_count" not in existing_le:
                 conn.execute("ALTER TABLE leaf_edges ADD COLUMN countercausal_count INTEGER NOT NULL DEFAULT 0")
@@ -189,15 +195,18 @@ class Database:
             return []
         sql = """
             INSERT INTO causal_relations
-                (post_id, cause_text, effect_text, cause_norm, effect_norm, confidence, extractor, is_countercausal)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (post_id, cause_text, effect_text, cause_norm, effect_norm,
+                 cause_canonical, effect_canonical, confidence, extractor, is_countercausal)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         ids: list[int] = []
         with self._connect() as conn:
             for r in relations:
                 cur = conn.execute(sql, (
                     r.post_id, r.cause_text, r.effect_text,
-                    r.cause_norm, r.effect_norm, r.confidence, r.extractor,
+                    r.cause_norm, r.effect_norm,
+                    r.cause_canonical, r.effect_canonical,
+                    r.confidence, r.extractor,
                     int(r.is_countercausal),
                 ))
                 ids.append(cur.lastrowid)
@@ -207,11 +216,33 @@ class Database:
         with self._connect() as conn:
             return conn.execute("SELECT COUNT(*) FROM causal_relations").fetchone()[0]
 
+    def update_canonical_fields(self, relations: list, relation_ids: list[int]) -> None:
+        """
+        Persist cause_canonical / effect_canonical for existing relation rows.
+        Args:
+            relations:    CausalRelation objects with canonical fields filled.
+            relation_ids: DB IDs corresponding to each relation (same order).
+        """
+        if not relations:
+            return
+        sql = """
+            UPDATE causal_relations
+            SET cause_canonical = ?, effect_canonical = ?
+            WHERE id = ?
+        """
+        with self._connect() as conn:
+            conn.executemany(sql, [
+                (r.cause_canonical, r.effect_canonical, rid)
+                for r, rid in zip(relations, relation_ids)
+            ])
+
     def get_all_relations(self) -> list[CausalRelation]:
         sql = """
-            SELECT post_id, cause_text, effect_text, cause_norm, effect_norm,
-                   confidence, extractor, is_countercausal
-            FROM causal_relations
+            SELECT cr.post_id, cr.cause_text, cr.effect_text, cr.cause_norm, cr.effect_norm,
+                   cr.cause_canonical, cr.effect_canonical, cr.confidence, cr.extractor,
+                   cr.is_countercausal, p.title AS post_title
+            FROM causal_relations cr
+            JOIN posts p ON p.id = cr.post_id
         """
         with self._connect() as conn:
             rows = conn.execute(sql).fetchall()
@@ -222,9 +253,12 @@ class Database:
                 effect_text=r["effect_text"],
                 cause_norm=r["cause_norm"],
                 effect_norm=r["effect_norm"],
+                cause_canonical=r["cause_canonical"] or "",
+                effect_canonical=r["effect_canonical"] or "",
                 confidence=r["confidence"],
                 extractor=r["extractor"],
                 is_countercausal=bool(r["is_countercausal"]),
+                post_title=r["post_title"] or "",
             )
             for r in rows
         ]

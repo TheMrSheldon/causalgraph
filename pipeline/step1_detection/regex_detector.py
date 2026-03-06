@@ -1,5 +1,5 @@
 """
-Step 1 default implementation: regex-based causality identification.
+Step 1 default implementation: regex-based causality detection.
 
 Scans titles for explicit and implicit causal language using a set of
 compiled regular expression patterns. Fast, zero cost, high precision.
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-from pipeline.protocols import CausalityIdentifier, Post
+from pipeline.protocols import CausalityDetector, Post
 
 # ---------------------------------------------------------------------------
 # Pattern groups
@@ -62,33 +62,29 @@ _COMPILED_EXCLUSION = [re.compile(p, re.IGNORECASE) for p in _EXCLUSION_PATTERNS
 
 
 def _is_causal(title: str) -> bool:
-    # Reject titles matching exclusion patterns
     if any(exc.search(title) for exc in _COMPILED_EXCLUSION):
         return False
-    # Accept on any explicit pattern (high confidence)
     if any(pat.search(title) for pat in _COMPILED_EXPLICIT):
         return True
-    # Accept on any implicit pattern (lower confidence, but still causal)
     if any(pat.search(title) for pat in _COMPILED_IMPLICIT):
         return True
     return False
 
 
-class RegexIdentifier:
+class RegexDetector:
     """
-    Implements CausalityIdentifier via compiled regex patterns.
+    Implements CausalityDetector via compiled regex patterns.
 
     All kwargs from config.yaml (beyond 'implementation') are accepted and
     ignored so the registry can pass them without error.
     """
 
     def __init__(self, **kwargs) -> None:
-        # Accept any extra config keys without error
         pass
 
     @property
     def name(self) -> str:
         return "regex"
 
-    def identify(self, posts: list[Post]) -> list[Post]:
+    def detect(self, posts: list[Post]) -> list[Post]:
         return [p for p in posts if _is_causal(p.title)]

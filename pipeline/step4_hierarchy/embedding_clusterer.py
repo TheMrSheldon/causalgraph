@@ -90,11 +90,14 @@ class EmbeddingClusterer:
         text_to_idx: dict[str, int] = {}
 
         for r in relations:
-            for text in (r.cause_norm, r.effect_norm):
-                if text not in text_set:
-                    text_to_idx[text] = len(all_texts)
-                    all_texts.append(text)
-                    text_set.add(text)
+            for norm, canonical in (
+                (r.cause_norm, r.cause_canonical or r.cause_text or r.cause_norm),
+                (r.effect_norm, r.effect_canonical or r.effect_text or r.effect_norm),
+            ):
+                if norm not in text_set:
+                    text_to_idx[norm] = len(all_texts)
+                    all_texts.append(canonical)
+                    text_set.add(norm)
 
         print(f"[EmbeddingClusterer] Embedding {len(all_texts)} unique event texts...")
         model = self._get_model()

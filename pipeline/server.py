@@ -10,9 +10,9 @@ Start with:
 
 Endpoints
 ---------
-POST /identify   — Step 1: decide whether text contains causal language
-POST /extract    — Step 2: extract (cause, effect) pairs with certainty scores
-GET  /health     — liveness check
+POST /detect    — Step 1: decide whether text contains causal language
+POST /extract   — Step 2+3: extract (cause, effect) pairs and canonize them
+GET  /health    — liveness check
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from pipeline.protocols import Post
-from pipeline.registry import build_identifier, build_extractor
+from pipeline.registry import build_canonizer, build_detector, build_extractor
 
 
 # ---------------------------------------------------------------------------
@@ -39,13 +39,18 @@ def _get_config() -> dict:
 
 
 @lru_cache(maxsize=1)
-def _get_identifier():
-    return build_identifier(_get_config())
+def _get_detector():
+    return build_detector(_get_config())
 
 
 @lru_cache(maxsize=1)
 def _get_extractor():
     return build_extractor(_get_config())
+
+
+@lru_cache(maxsize=1)
+def _get_canonizer():
+    return build_canonizer(_get_config())
 
 
 # ---------------------------------------------------------------------------
@@ -85,11 +90,11 @@ def _find_span(sentence: str, phrase: str, sent_offset: int) -> tuple[int, int] 
 # Request / response models
 # ---------------------------------------------------------------------------
 
-class IdentifyRequest(BaseModel):
+class DetectRequest(BaseModel):
     text: str
 
 
-class IdentifyResponse(BaseModel):
+class DetectResponse(BaseModel):
     is_causal: bool
 
 
@@ -110,6 +115,8 @@ class RelationItem(BaseModel):
     effect_event_index: int
     cause_text: str
     effect_text: str
+    cause_canonical: str
+    effect_canonical: str
     is_countercausal: bool
     p_none: float
     p_causal: float
@@ -133,7 +140,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Pipeline Step API",
         description="Per-step REST interface for the r/science causal pipeline.",
-        version="0.1.0",
+        version="0.2.0",
     )
 
     app.add_middleware(
@@ -148,37 +155,64 @@ def create_app() -> FastAPI:
     def health() -> dict:
         return {"status": "ok"}
 
-    @app.post("/identify", response_model=IdentifyResponse)
-    def identify(body: IdentifyRequest) -> IdentifyResponse:
+    @app.post("/detect", response_model=DetectResponse)
+    def detect(body: DetectRequest) -> DetectResponse:
         """
         Step 1 — Decide whether the given text contains causal language.
-        Returns ``is_causal: true`` if the configured identifier classifies
+        Returns ``is_causal: true`` if the configured detector classifies
         the text as causal.
         """
         text = body.text.strip()
         if not text:
-            return IdentifyResponse(is_causal=False)
-        post = Post(id="_identify_0", title=text, score=0, num_comments=0, created_utc=0)
-        result = _get_identifier().identify([post])
-        return IdentifyResponse(is_causal=len(result) > 0)
+            return DetectResponse(is_causal=False)
+        post = Post(id="_detect_0", title=text, score=0, num_comments=0, created_utc=0)
+        result = _get_detector().detect([post])
+        return DetectResponse(is_causal=len(result) > 0)
 
     @app.post("/extract", response_model=ExtractResponse)
     def extract(body: ExtractRequest) -> ExtractResponse:
         """
-        Step 2 — Extract causal relations from free text.
+        Steps 2+3 — Extract causal relations from free text, then canonize
+        the event descriptions.
 
         Splits the input into sentences, runs the configured extractor on
-        each, and returns:
+        each, canonizes the resulting spans, and returns:
         - ``events``: unique event spans with character offsets in the original text
-        - ``relations``: cause→effect pairs with per-label certainty scores
+        - ``relations``: cause→effect pairs with canonical descriptions and
+          per-label certainty scores
         """
         text = body.text.strip()
         if not text:
             return ExtractResponse(text=text, events=[], relations=[])
 
         extractor = _get_extractor()
+        canonizer = _get_canonizer()
         sentences = _split_sentences(text)
 
+        # Collect all raw relations across sentences first so we can batch-canonize
+        from pipeline.protocols import CausalRelation as CR
+        raw_relations: list[tuple[CR, str, int]] = []  # (relation, sent_text, sent_offset)
+
+        for sent_text, sent_offset in sentences:
+            post = Post(
+                id=f"_extract_{sent_offset}",
+                title=sent_text,
+                score=0,
+                num_comments=0,
+                created_utc=0,
+            )
+            for rel in extractor.extract(post):
+                rel.post_title = text  # full input text as canonization context
+                raw_relations.append((rel, sent_text, sent_offset))
+
+        # Canonize all at once
+        if raw_relations:
+            just_rels = [r for r, _, _ in raw_relations]
+            canonized = canonizer.canonize(just_rels)
+        else:
+            canonized = []
+
+        # Build events + response relations
         event_index_map: dict[str, int] = {}
         events: list[EventItem] = []
         relations: list[RelationItem] = []
@@ -201,29 +235,23 @@ def create_app() -> FastAPI:
             ))
             return idx
 
-        for sent_text, sent_offset in sentences:
-            post = Post(
-                id=f"_extract_{sent_offset}",
-                title=sent_text,
-                score=0,
-                num_comments=0,
-                created_utc=0,
-            )
-            for rel in extractor.extract(post):
-                cause_idx = _get_or_add_event(rel.cause_text, sent_text, sent_offset)
-                effect_idx = _get_or_add_event(rel.effect_text, sent_text, sent_offset)
-                if cause_idx is None or effect_idx is None:
-                    continue
-                relations.append(RelationItem(
-                    cause_event_index=cause_idx,
-                    effect_event_index=effect_idx,
-                    cause_text=rel.cause_text,
-                    effect_text=rel.effect_text,
-                    is_countercausal=rel.is_countercausal,
-                    p_none=rel.p_none,
-                    p_causal=rel.p_causal,
-                    p_countercausal=rel.p_countercausal,
-                ))
+        for canon_rel, (_, sent_text, sent_offset) in zip(canonized, raw_relations):
+            cause_idx = _get_or_add_event(canon_rel.cause_text, sent_text, sent_offset)
+            effect_idx = _get_or_add_event(canon_rel.effect_text, sent_text, sent_offset)
+            if cause_idx is None or effect_idx is None:
+                continue
+            relations.append(RelationItem(
+                cause_event_index=cause_idx,
+                effect_event_index=effect_idx,
+                cause_text=canon_rel.cause_text,
+                effect_text=canon_rel.effect_text,
+                cause_canonical=canon_rel.cause_canonical,
+                effect_canonical=canon_rel.effect_canonical,
+                is_countercausal=canon_rel.is_countercausal,
+                p_none=canon_rel.p_none,
+                p_causal=canon_rel.p_causal,
+                p_countercausal=canon_rel.p_countercausal,
+            ))
 
         return ExtractResponse(text=text, events=events, relations=relations)
 

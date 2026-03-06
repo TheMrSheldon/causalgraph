@@ -24,10 +24,11 @@ implementation therefore:
 
 Event text choice
 -----------------
-Set ``use_norm=False`` (the default) to embed the raw extracted phrase
-(``cause_text`` / ``effect_text``) rather than the lowercased/lemmatised norm.
-The raw phrase preserves capitalisation and phrasing that the sentence
-transformer can use.  Set ``use_norm=True`` to match the other implementations.
+Set ``use_norm=False`` (the default) to embed ``cause_canonical`` /
+``effect_canonical`` — the self-contained descriptions produced by Step 3
+(canonization) — falling back to ``cause_text`` / ``effect_text`` when the
+canonical field is empty (e.g. when running the hierarchy step standalone).
+Set ``use_norm=True`` to embed the lowercased/lemmatised norm instead.
 """
 from __future__ import annotations
 
@@ -84,7 +85,9 @@ class EmbeddingWardClusterer:
         the fact.  Keep below ~8 000 to avoid OOM (O(n²) distance matrix).
     use_norm : bool
         If True, embed ``cause_norm`` / ``effect_norm`` (lowercased/lemmatised).
-        If False (default), embed the richer raw ``cause_text`` / ``effect_text``.
+        If False (default), embed ``cause_canonical`` / ``effect_canonical``
+        (the self-contained description produced by Step 3 canonization),
+        falling back to ``cause_text`` / ``effect_text`` if canonical is empty.
     """
 
     def __init__(
@@ -130,24 +133,29 @@ class EmbeddingWardClusterer:
         n_levels = len(self.n_clusters_per_level)
 
         # ------------------------------------------------------------------
-        # 1. Collect unique event (norm, raw) pairs — norm is the dedup key
+        # 1. Collect unique event texts — norm is the dedup key,
+        #    canonical (or raw) is what gets embedded.
         # ------------------------------------------------------------------
-        norm_to_raw: dict[str, str] = {}
+        # norm_to_canonical: stable dedup key → best available description
+        norm_to_canonical: dict[str, str] = {}
         for r in relations:
-            for raw, norm in ((r.cause_text, r.cause_norm), (r.effect_text, r.effect_norm)):
-                if norm not in norm_to_raw:
-                    norm_to_raw[norm] = raw
+            for norm, canonical in (
+                (r.cause_norm, r.cause_canonical or r.cause_text or r.cause_norm),
+                (r.effect_norm, r.effect_canonical or r.effect_text or r.effect_norm),
+            ):
+                if norm not in norm_to_canonical:
+                    norm_to_canonical[norm] = canonical
 
-        all_norms: list[str] = list(norm_to_raw.keys())
-        all_raws: list[str] = [norm_to_raw[n] for n in all_norms]
-        embed_texts = all_norms if self.use_norm else all_raws
+        all_norms: list[str] = list(norm_to_canonical.keys())
+        all_canonicals: list[str] = [norm_to_canonical[n] for n in all_norms]
+        embed_texts = all_norms if self.use_norm else all_canonicals
 
         n_total = len(all_norms)
         norm_to_idx: dict[str, int] = {n: i for i, n in enumerate(all_norms)}
 
         print(
             f"[EmbeddingWardClusterer] Embedding {n_total} unique event texts "
-            f"({'norm' if self.use_norm else 'raw'} text, {n_levels} levels)…"
+            f"({'norm' if self.use_norm else 'canonical'} text, {n_levels} levels)…"
         )
         model = self._get_model()
         embeddings = model.encode(
