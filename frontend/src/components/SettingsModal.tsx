@@ -88,6 +88,7 @@ interface SettingsModalProps {
   onClose: () => void
   minPostCount: number
   onMinPostCountChange: (count: number) => void
+  activeScreen: string
 }
 
 function SegmentedControl<T extends string>({
@@ -163,8 +164,9 @@ const LAYOUT_OPTIONS: { value: LayoutAlgorithm; label: string }[] = [
 
 export function SettingsModal({
   open, settings, onSettingsChange, onClose,
-  minPostCount, onMinPostCountChange,
+  minPostCount, onMinPostCountChange, activeScreen,
 }: SettingsModalProps) {
+  const isExplorer = activeScreen === 'explorer'
   const queryClient = useQueryClient()
 
   // ── Endpoint override state ──────────────────────────────────────────────
@@ -268,71 +270,75 @@ export function SettingsModal({
             <p className="url-field-hint">Leave blank to use the default proxied paths. Changes take effect immediately.</p>
           </div>
 
-          <div className="settings-section">
-            <div className="settings-section-title">Graph Data</div>
-            <div className="settings-group">
-              <div className="settings-group-label">Min posts per edge</div>
-              <input
-                className="settings-number"
-                type="number"
-                min={1}
-                max={9999}
-                value={minPostCount}
-                onChange={(e) => onMinPostCountChange(Math.max(1, Number(e.target.value)))}
-              />
-            </div>
-          </div>
+          {isExplorer && (
+            <>
+              <div className="settings-section">
+                <div className="settings-section-title">Graph Data</div>
+                <div className="settings-group">
+                  <div className="settings-group-label">Min posts per edge</div>
+                  <input
+                    className="settings-number"
+                    type="number"
+                    min={1}
+                    max={9999}
+                    value={minPostCount}
+                    onChange={(e) => onMinPostCountChange(Math.max(1, Number(e.target.value)))}
+                  />
+                </div>
+              </div>
 
-          <div className="settings-section">
-            <div className="settings-section-title">Visual Encoding</div>
-            <div className="settings-group">
-              <div className="settings-group-label">Cluster size</div>
-              <SegmentedControl value={settings.clusterSizeMode} onChange={(v) => set('clusterSizeMode', v)} options={VIZ_OPTIONS} />
-            </div>
-            <div className="settings-group">
-              <div className="settings-group-label">Link strength</div>
-              <SegmentedControl value={settings.linkSizeMode} onChange={(v) => set('linkSizeMode', v)} options={VIZ_OPTIONS} />
-            </div>
-            <Toggle label="Edge labels" value={settings.showEdgeLabels} onChange={(v) => set('showEdgeLabels', v)} />
-            <Toggle label="Member count in label" value={settings.showMemberCount} onChange={(v) => set('showMemberCount', v)} />
-          </div>
+              <div className="settings-section">
+                <div className="settings-section-title">Visual Encoding</div>
+                <div className="settings-group">
+                  <div className="settings-group-label">Cluster size</div>
+                  <SegmentedControl value={settings.clusterSizeMode} onChange={(v) => set('clusterSizeMode', v)} options={VIZ_OPTIONS} />
+                </div>
+                <div className="settings-group">
+                  <div className="settings-group-label">Link strength</div>
+                  <SegmentedControl value={settings.linkSizeMode} onChange={(v) => set('linkSizeMode', v)} options={VIZ_OPTIONS} />
+                </div>
+                <Toggle label="Edge labels" value={settings.showEdgeLabels} onChange={(v) => set('showEdgeLabels', v)} />
+                <Toggle label="Member count in label" value={settings.showMemberCount} onChange={(v) => set('showMemberCount', v)} />
+              </div>
 
-          <div className="settings-section">
-            <div className="settings-section-title">Interaction</div>
-            <Toggle label="Dim unrelated on selection" value={settings.dimOnSelection} onChange={(v) => set('dimOnSelection', v)} />
-            <Toggle label="Highlight neighbors on hover" value={settings.highlightOnHover} onChange={(v) => set('highlightOnHover', v)} />
-          </div>
+              <div className="settings-section">
+                <div className="settings-section-title">Interaction</div>
+                <Toggle label="Dim unrelated on selection" value={settings.dimOnSelection} onChange={(v) => set('dimOnSelection', v)} />
+                <Toggle label="Highlight neighbors on hover" value={settings.highlightOnHover} onChange={(v) => set('highlightOnHover', v)} />
+              </div>
 
-          <div className="settings-section">
-            <div className="settings-section-title">Layout</div>
-            <div className="settings-group">
-              <div className="settings-group-label">Algorithm</div>
-              <select
-                className="settings-select"
-                value={settings.layoutAlgorithm}
-                onChange={(e) => set('layoutAlgorithm', e.target.value as LayoutAlgorithm)}
-              >
-                {LAYOUT_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="settings-group">
-              <div className="settings-group-label">Node spacing</div>
-              <SegmentedControl value={settings.nodeSpacing} onChange={(v) => set('nodeSpacing', v)} options={SPACING_OPTIONS} />
-            </div>
-            <div className="settings-group">
-              <div className="settings-group-label">Animation speed</div>
-              <SegmentedControl value={settings.animationSpeed} onChange={(v) => set('animationSpeed', v)} options={ANIMATION_OPTIONS} />
-            </div>
-          </div>
+              <div className="settings-section">
+                <div className="settings-section-title">Layout</div>
+                <div className="settings-group">
+                  <div className="settings-group-label">Algorithm</div>
+                  <select
+                    className="settings-select"
+                    value={settings.layoutAlgorithm}
+                    onChange={(e) => set('layoutAlgorithm', e.target.value as LayoutAlgorithm)}
+                  >
+                    {LAYOUT_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="settings-group">
+                  <div className="settings-group-label">Node spacing</div>
+                  <SegmentedControl value={settings.nodeSpacing} onChange={(v) => set('nodeSpacing', v)} options={SPACING_OPTIONS} />
+                </div>
+                <div className="settings-group">
+                  <div className="settings-group-label">Animation speed</div>
+                  <SegmentedControl value={settings.animationSpeed} onChange={(v) => set('animationSpeed', v)} options={ANIMATION_OPTIONS} />
+                </div>
+              </div>
 
-          <div className="settings-section">
-            <div className="settings-section-title">Display</div>
-            <Toggle label="Show arrows" value={settings.showArrows} onChange={(v) => set('showArrows', v)} />
-            <Toggle label="Show legend" value={settings.showLegend} onChange={(v) => set('showLegend', v)} />
-            <Toggle label="Highlight event spans in posts" value={settings.showHighlightSpans} onChange={(v) => set('showHighlightSpans', v)} />
-          </div>
+              <div className="settings-section">
+                <div className="settings-section-title">Display</div>
+                <Toggle label="Show arrows" value={settings.showArrows} onChange={(v) => set('showArrows', v)} />
+                <Toggle label="Show legend" value={settings.showLegend} onChange={(v) => set('showLegend', v)} />
+                <Toggle label="Highlight event spans in posts" value={settings.showHighlightSpans} onChange={(v) => set('showHighlightSpans', v)} />
+              </div>
+            </>
+          )}
 
         </div>
       </div>

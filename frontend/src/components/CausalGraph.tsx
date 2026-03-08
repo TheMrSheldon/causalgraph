@@ -192,7 +192,8 @@ function buildCytoscapeStyle(settings: GraphSettings): StylesheetStyle[] {
       style: {
         'border-width': 3,
         'border-color': '#1e87f0',
-      },
+        'z-index': 20,
+      } as AnyStyle,
     },
     {
       selector: 'edge',
@@ -474,6 +475,7 @@ export function CausalGraph({
     if (settingsRef.current.dimOnSelection) cy.elements().not(kept).addClass('dimmed')
     outgoing.addClass('edge-outgoing')
     incoming.addClass('edge-incoming')
+    outgoing.union(incoming).select()
   }, [])
 
   // Initialize Cytoscape once
@@ -525,6 +527,8 @@ export function CausalGraph({
       const id = parseInt(node.id().replace('cluster-', ''), 10)
       selectedNodeRef.current = id
       applyHighlight(node)
+      // Select connected edges so Cytoscape renders them in the active pass (above nodes)
+      node.connectedEdges().select()
       onNodeClick(id)
     })
 
@@ -536,10 +540,15 @@ export function CausalGraph({
     cy.on('mouseout', 'node', () => {
       if (!settingsRef.current.highlightOnHover) return
       cy.elements().removeClass('edge-outgoing edge-incoming dimmed')
+      cy.edges().unselect()
       if (selectedNodeRef.current !== null) {
         const sel = cy.$(`#cluster-${selectedNodeRef.current}`)
-        if (sel.length > 0) applyHighlight(sel)
-        else applyChildrenHighlight(selectedNodeRef.current)
+        if (sel.length > 0) {
+          applyHighlight(sel)
+          sel.connectedEdges().select()
+        } else {
+          applyChildrenHighlight(selectedNodeRef.current)
+        }
       }
     })
 
@@ -582,6 +591,7 @@ export function CausalGraph({
       cy.elements().unselect()
       node.select()
       applyHighlight(node)
+      node.connectedEdges().select()
     } else {
       // Parent is expanded — highlight its children instead
       applyChildrenHighlight(selectedClusterId)
