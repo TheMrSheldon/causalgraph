@@ -132,6 +132,17 @@ export function StatsModal({ open, onClose, nodes, edges, clusterLabels }: Stats
             </StatSection>
           )}
 
+          <StatSection title="Build">
+            <StatRow
+              label="Version"
+              value={import.meta.env.VITE_BUILD_VERSION || 'dev'}
+            />
+            <StatRow
+              label="Built"
+              value={import.meta.env.VITE_BUILD_DATE || 'unknown'}
+            />
+          </StatSection>
+
         </div>
       </div>
     </div>

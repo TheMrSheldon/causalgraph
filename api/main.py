@@ -1,6 +1,7 @@
 """FastAPI application factory."""
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -44,6 +45,13 @@ def create_app() -> FastAPI:
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok"}
+
+    @app.get("/api/version")
+    def version() -> dict:
+        return {
+            "version": os.environ.get("BUILD_VERSION", "dev"),
+            "build_date": os.environ.get("BUILD_DATE", "unknown"),
+        }
 
     return app
 

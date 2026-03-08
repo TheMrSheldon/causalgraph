@@ -16,8 +16,15 @@ GET  /health    — liveness check
 """
 from __future__ import annotations
 
+import os
 import re
 from functools import lru_cache
+
+# When running inside the Docker container, routes are mounted under /pipeline
+# so that the lighttpd reverse proxy can forward /pipeline/* without any path
+# rewriting.  In the dev environment (Vite proxy strips the prefix) this stays
+# empty so all routes are served at their plain paths (/detect, /extract, …).
+_PIPELINE_ROOT = os.environ.get("PIPELINE_ROOT", "").rstrip("/")
 
 import yaml
 from fastapi import FastAPI
@@ -151,11 +158,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    @app.get("/health")
+    @app.get(f"{_PIPELINE_ROOT}/health")
     def health() -> dict:
         return {"status": "ok"}
 
-    @app.post("/detect", response_model=DetectResponse)
+    @app.post(f"{_PIPELINE_ROOT}/detect", response_model=DetectResponse)
     def detect(body: DetectRequest) -> DetectResponse:
         """
         Step 1 — Decide whether the given text contains causal language.
@@ -169,7 +176,7 @@ def create_app() -> FastAPI:
         result = _get_detector().detect([post])
         return DetectResponse(is_causal=len(result) > 0)
 
-    @app.post("/extract", response_model=ExtractResponse)
+    @app.post(f"{_PIPELINE_ROOT}/extract", response_model=ExtractResponse)
     def extract(body: ExtractRequest) -> ExtractResponse:
         """
         Steps 2+3 — Extract causal relations from free text, then canonize
