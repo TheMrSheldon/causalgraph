@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { setApiOverrides, getApiOverrides } from '../api/client'
-import type { GraphSettings, LayoutAlgorithm, NodeSpacing, VisualizationMode } from '../types'
+import type { AnimationSpeed, GraphSettings, LayoutAlgorithm, NodeSpacing, VisualizationMode } from '../types'
 
 // ---------------------------------------------------------------------------
 // Endpoint validation + health-ping helpers
@@ -144,6 +144,13 @@ const SPACING_OPTIONS: { value: NodeSpacing; label: string }[] = [
   { value: 'tight',  label: 'Tight'  },
   { value: 'normal', label: 'Normal' },
   { value: 'spread', label: 'Spread' },
+]
+
+const ANIMATION_OPTIONS: { value: AnimationSpeed; label: string }[] = [
+  { value: 'off',    label: 'Off'    },
+  { value: 'fast',   label: 'Fast'   },
+  { value: 'normal', label: 'Normal' },
+  { value: 'slow',   label: 'Slow'   },
 ]
 
 const LAYOUT_OPTIONS: { value: LayoutAlgorithm; label: string }[] = [
@@ -314,7 +321,10 @@ export function SettingsModal({
               <div className="settings-group-label">Node spacing</div>
               <SegmentedControl value={settings.nodeSpacing} onChange={(v) => set('nodeSpacing', v)} options={SPACING_OPTIONS} />
             </div>
-            <Toggle label="Animate layout" value={settings.animateLayout} onChange={(v) => set('animateLayout', v)} />
+            <div className="settings-group">
+              <div className="settings-group-label">Animation speed</div>
+              <SegmentedControl value={settings.animationSpeed} onChange={(v) => set('animationSpeed', v)} options={ANIMATION_OPTIONS} />
+            </div>
           </div>
 
           <div className="settings-section">

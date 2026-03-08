@@ -129,6 +129,8 @@ export type VisualizationMode = 'no' | 'opacity' | 'size'
 export type NodeSpacing = 'tight' | 'normal' | 'spread'
 export type LayoutAlgorithm = 'fcose' | 'cose' | 'breadthfirst' | 'circle' | 'concentric'
 
+export type AnimationSpeed = 'off' | 'fast' | 'normal' | 'slow'
+
 export interface GraphSettings {
   clusterSizeMode: VisualizationMode
   linkSizeMode: VisualizationMode
@@ -138,7 +140,7 @@ export interface GraphSettings {
   highlightOnHover: boolean
   nodeSpacing: NodeSpacing
   layoutAlgorithm: LayoutAlgorithm
-  animateLayout: boolean
+  animationSpeed: AnimationSpeed
   showArrows: boolean
   showLegend: boolean
   showHighlightSpans: boolean

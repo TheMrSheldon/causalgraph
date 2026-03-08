@@ -2,7 +2,7 @@ import cytoscape, { type ElementDefinition, type StylesheetStyle } from 'cytosca
 // @ts-expect-error – no types for fcose
 import fcose from 'cytoscape-fcose'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ClusterNode, GraphEdge, GraphSettings, LayoutAlgorithm, NodeSpacing, SelectedEdge } from '../types'
+import type { AnimationSpeed, ClusterNode, GraphEdge, GraphSettings, LayoutAlgorithm, NodeSpacing, SelectedEdge } from '../types'
 
 cytoscape.use(fcose)
 
@@ -12,9 +12,17 @@ const SPACING_PARAMS: Record<NodeSpacing, { nodeRepulsion: number; idealEdgeLeng
   spread: { nodeRepulsion: 600000, idealEdgeLength: 500, nodeSeparation: 400, spacingFactor: 2.0 },
 }
 
-function buildLayout(algorithm: LayoutAlgorithm, nodeSpacing: NodeSpacing, animate: boolean): cytoscape.LayoutOptions {
+const ANIMATION_DURATION: Record<AnimationSpeed, number> = {
+  off:    0,
+  fast:   200,
+  normal: 600,
+  slow:   1500,
+}
+
+function buildLayout(algorithm: LayoutAlgorithm, nodeSpacing: NodeSpacing, animationSpeed: AnimationSpeed): cytoscape.LayoutOptions {
   const sp = SPACING_PARAMS[nodeSpacing]
-  const common = { animate, animationDuration: 600, padding: 60 }
+  const animate = animationSpeed !== 'off'
+  const common = { animate, animationDuration: ANIMATION_DURATION[animationSpeed], padding: 60 }
   if (algorithm === 'fcose') {
     return {
       name: 'fcose',
@@ -69,8 +77,9 @@ function buildLayout(algorithm: LayoutAlgorithm, nodeSpacing: NodeSpacing, anima
 // Level-2 (top / table header):  #929292  lecturenotes table header color
 // Level-1 (mid / part row):      #b8b8b8  lighter step
 // Level-0 (leaf / unit row):     #d4d4d4  lightest — with dark text
-// Selected:                      #f0506e  Webis danger red
-// Edges:                         #aaaaaa  neutral mid-gray
+// Selected:                      #1e87f0  Webis primary blue
+// Edges (causes):                #32d296  Webis success teal-green
+// Edges (countercausal):         #f0506e  Webis danger red
 
 export const LEVEL_COLORS = {
   2: '#929292',
@@ -182,7 +191,7 @@ function buildCytoscapeStyle(settings: GraphSettings): StylesheetStyle[] {
       selector: 'node:selected',
       style: {
         'border-width': 3,
-        'border-color': '#f0506e',
+        'border-color': '#1e87f0',
       },
     },
     {
@@ -198,18 +207,25 @@ function buildCytoscapeStyle(settings: GraphSettings): StylesheetStyle[] {
       },
     },
     {
+      selector: 'edge.edge-countercausal',
+      style: {
+        'line-style': 'dashed',
+        'line-dash-pattern': [6, 4],
+      } as AnyStyle,
+    },
+    {
       selector: 'edge:selected',
       style: {
-        'line-color': '#f0506e',
-        'target-arrow-color': '#f0506e',
+        'line-color': '#1e87f0',
+        'target-arrow-color': '#1e87f0',
         opacity: 1,
       },
     },
     {
       selector: 'edge.edge-outgoing',
       style: {
-        'line-color': '#1e87f0',
-        'target-arrow-color': '#1e87f0',
+        'line-color': '#32d296',
+        'target-arrow-color': '#32d296',
         opacity: 1,
         ...hlWidth,
       },
@@ -299,6 +315,8 @@ function toCytoscapeElements(
     const tgtId = `cluster-${edge.target_cluster_id}`
     if (!nodeIdSet.has(srcId) || !nodeIdSet.has(tgtId)) continue
 
+    const cc = edge.countercausal_count ?? 0
+    const isCountercausal = cc > 0 && cc > (edge.relation_count - cc)
     elements.push({
       data: {
         id: `edge-${edge.source_cluster_id}-${edge.target_cluster_id}`,
@@ -307,8 +325,9 @@ function toCytoscapeElements(
         post_count: edge.post_count,
         relation_count: edge.relation_count,
         avg_score: edge.avg_score,
-        countercausal_count: edge.countercausal_count ?? 0,
+        countercausal_count: cc,
       },
+      classes: isCountercausal ? 'edge-countercausal' : undefined,
     })
   }
 
@@ -400,7 +419,7 @@ export function CausalGraph({
     })
     const focusedEles = cy.nodes().filter((n) => visibleIds.has(n.id()))
     if (focusedEles.length > 0) {
-      cy.animate({ fit: { eles: focusedEles, padding: 80 } as cytoscape.Fit, duration: animate ? 400 : 0 })
+      cy.animate({ fit: { eles: focusedEles, padding: 80 } as cytoscape.Fit, duration: animate ? ANIMATION_DURATION[settingsRef.current.animationSpeed] : 0 })
     }
   }, [])
 
@@ -408,7 +427,7 @@ export function CausalGraph({
     const cy = cyRef.current
     if (!cy) return
     cy.elements().removeClass('focus-dimmed')
-    cy.animate({ fit: { eles: cy.elements(), padding: 60 } as cytoscape.Fit, duration: animate ? 400 : 0 })
+    cy.animate({ fit: { eles: cy.elements(), padding: 60 } as cytoscape.Fit, duration: animate ? ANIMATION_DURATION[settingsRef.current.animationSpeed] : 0 })
   }, [])
 
   // Pop one focus level; collapse the node if it was auto-expanded by focus entry
@@ -464,7 +483,7 @@ export function CausalGraph({
     cyRef.current = cytoscape({
       container: containerRef.current,
       style: buildCytoscapeStyle(settings),
-      layout: buildLayout(settings.layoutAlgorithm, settings.nodeSpacing, settings.animateLayout),
+      layout: buildLayout(settings.layoutAlgorithm, settings.nodeSpacing, settings.animationSpeed),
       userZoomingEnabled: true,
       userPanningEnabled: true,
       boxSelectionEnabled: false,
@@ -549,8 +568,8 @@ export function CausalGraph({
   // Re-run layout when spacing or animation settings change
   useEffect(() => {
     if (!layoutInitRef.current) { layoutInitRef.current = true; return }
-    cyRef.current?.layout(buildLayout(settings.layoutAlgorithm, settings.nodeSpacing, settings.animateLayout)).run()
-  }, [settings.layoutAlgorithm, settings.nodeSpacing, settings.animateLayout]) // eslint-disable-line react-hooks/exhaustive-deps
+    cyRef.current?.layout(buildLayout(settings.layoutAlgorithm, settings.nodeSpacing, settings.animationSpeed)).run()
+  }, [settings.layoutAlgorithm, settings.nodeSpacing, settings.animationSpeed]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Programmatically highlight node when selectedClusterId changes (from sidebar links)
   useEffect(() => {
@@ -594,7 +613,7 @@ export function CausalGraph({
       cy.style(buildCytoscapeStyle(settingsRef.current))
       cy.elements().removeClass('edge-outgoing edge-incoming dimmed').remove()
       cy.add(elements)
-      cy.layout(buildLayout(settingsRef.current.layoutAlgorithm, settingsRef.current.nodeSpacing, settingsRef.current.animateLayout)).run()
+      cy.layout(buildLayout(settingsRef.current.layoutAlgorithm, settingsRef.current.nodeSpacing, settingsRef.current.animationSpeed)).run()
       return
     }
 
@@ -606,7 +625,7 @@ export function CausalGraph({
     const toAdd = elements.filter((e) => !currentIds.has(e.data.id as string))
     if (toAdd.length > 0) {
       cy.add(toAdd)
-      cy.layout(buildLayout(settingsRef.current.layoutAlgorithm, settingsRef.current.nodeSpacing, settingsRef.current.animateLayout)).run()
+      cy.layout(buildLayout(settingsRef.current.layoutAlgorithm, settingsRef.current.nodeSpacing, settingsRef.current.animationSpeed)).run()
     }
 
     // Re-apply selection highlight after expand/collapse
@@ -739,6 +758,28 @@ export function CausalGraph({
           <div className="graph-legend-item">
             <span className="graph-legend-dot" style={{ background: LEVEL_COLORS[0] }} />
             Leaf cluster
+          </div>
+          <div className="graph-legend-separator" />
+          <div className="graph-legend-item">
+            <svg width="24" height="10" viewBox="0 0 24 10" style={{ flexShrink: 0 }}>
+              <line x1="0" y1="5" x2="18" y2="5" stroke="#32d296" strokeWidth="2.5" strokeLinecap="round"/>
+              <polygon points="18,1 24,5 18,9" fill="#32d296"/>
+            </svg>
+            Causes (selected)
+          </div>
+          <div className="graph-legend-item">
+            <svg width="24" height="10" viewBox="0 0 24 10" style={{ flexShrink: 0 }}>
+              <line x1="0" y1="5" x2="18" y2="5" stroke="#faa05a" strokeWidth="2.5" strokeLinecap="round"/>
+              <polygon points="18,1 24,5 18,9" fill="#faa05a"/>
+            </svg>
+            Is caused by
+          </div>
+          <div className="graph-legend-item">
+            <svg width="24" height="10" viewBox="0 0 24 10" style={{ flexShrink: 0 }}>
+              <line x1="0" y1="5" x2="18" y2="5" stroke="#aaaaaa" strokeWidth="2" strokeDasharray="5 3"/>
+              <polygon points="18,1 24,5 18,9" fill="#aaaaaa"/>
+            </svg>
+            Does not cause
           </div>
           <div className="graph-legend-hint">
             Double-click to expand<br />

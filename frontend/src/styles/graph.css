@@ -924,6 +924,12 @@ mark.span-effect {
   flex-shrink: 0;
 }
 
+.graph-legend-separator {
+  height: 1px;
+  background: var(--webis-border);
+  margin: 2px 0;
+}
+
 .graph-legend-hint {
   margin-top: 6px;
   padding-top: 6px;

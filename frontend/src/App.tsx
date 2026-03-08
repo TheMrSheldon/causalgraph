@@ -32,7 +32,7 @@ export default function App() {
       highlightOnHover: false,
       nodeSpacing: 'normal',
       layoutAlgorithm: 'fcose',
-      animateLayout: true,
+      animationSpeed: 'normal' as const,
       showArrows: true,
       showLegend: true,
       showHighlightSpans: true,
