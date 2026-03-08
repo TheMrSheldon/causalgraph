@@ -217,7 +217,7 @@ def create_app() -> FastAPI:
         events: list[EventItem] = []
         relations: list[RelationItem] = []
 
-        def _get_or_add_event(phrase: str, sent_text: str, sent_offset: int) -> int | None:
+        def _get_or_add_event(phrase: str, sent_text: str, sent_offset: int, description: str) -> int | None:
             key = phrase.lower()
             if key in event_index_map:
                 return event_index_map[key]
@@ -229,15 +229,21 @@ def create_app() -> FastAPI:
             events.append(EventItem(
                 index=idx,
                 span_text=text[span[0]:span[1]],
-                description=phrase,
+                description=description,
                 start=span[0],
                 end=span[1],
             ))
             return idx
 
         for canon_rel, (_, sent_text, sent_offset) in zip(canonized, raw_relations):
-            cause_idx = _get_or_add_event(canon_rel.cause_text, sent_text, sent_offset)
-            effect_idx = _get_or_add_event(canon_rel.effect_text, sent_text, sent_offset)
+            cause_idx = _get_or_add_event(
+                canon_rel.cause_text, sent_text, sent_offset,
+                description=canon_rel.cause_canonical or canon_rel.cause_text,
+            )
+            effect_idx = _get_or_add_event(
+                canon_rel.effect_text, sent_text, sent_offset,
+                description=canon_rel.effect_canonical or canon_rel.effect_text,
+            )
             if cause_idx is None or effect_idx is None:
                 continue
             relations.append(RelationItem(

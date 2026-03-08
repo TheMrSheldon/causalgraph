@@ -27,11 +27,12 @@ pipeline:
     implementation: "transformer"   # Options: passthrough | transformer | llm_openai | llm_anthropic
 
     # Transformer options (only used when implementation = transformer)
-    model_name: "google/flan-t5-base"  # Any HuggingFace text2text-generation model
-    batch_size: 64                     # Prompts per batch; increase for GPU
-    max_new_tokens: 20                 # Max output length; event spans are short
+    # Default: Qwen2.5-1.5B-Instruct (~3 GB RAM on CPU)
+    # Upgrade: Qwen/Qwen2.5-3B-Instruct or mistralai/Mistral-7B-Instruct-v0.3
+    model_name: "Qwen/Qwen2.5-1.5B-Instruct"
+    batch_size: 8                      # Prompts per batch; increase for GPU (32–64)
+    max_new_tokens: 24                 # Max output tokens; event spans are short
     device: -1                         # -1 = CPU; 0 = first CUDA GPU
-    fast_path: true                    # Skip model for already-self-contained spans
 
     # LLM options (only used when implementation = llm_*)
     llm_model: "claude-haiku-4-5-20251001"
