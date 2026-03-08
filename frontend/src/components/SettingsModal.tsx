@@ -1,4 +1,85 @@
+import { useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { setApiOverrides, getApiOverrides } from '../api/client'
 import type { GraphSettings, LayoutAlgorithm, NodeSpacing, VisualizationMode } from '../types'
+
+// ---------------------------------------------------------------------------
+// Endpoint validation + health-ping helpers
+// ---------------------------------------------------------------------------
+
+type PingStatus =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | { kind: 'ok';    message: string }
+  | { kind: 'error'; message: string }
+
+function isValidHttpUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw)
+    return u.protocol === 'http:' || u.protocol === 'https:'
+  } catch { return false }
+}
+
+async function pingHealth(baseUrl: string): Promise<PingStatus> {
+  const healthUrl = `${baseUrl.replace(/\/$/, '')}/health`
+  const ac = new AbortController()
+  const tid = setTimeout(() => ac.abort(), 5000)
+  try {
+    const res = await fetch(healthUrl, { signal: ac.signal })
+    clearTimeout(tid)
+    if (!res.ok) return { kind: 'error', message: `HTTP ${res.status}` }
+    const body = await res.json().catch(() => null)
+    if (body?.status === 'ok') return { kind: 'ok', message: 'Connected' }
+    return { kind: 'error', message: 'Unexpected response' }
+  } catch (err) {
+    clearTimeout(tid)
+    if (err instanceof Error && err.name === 'AbortError')
+      return { kind: 'error', message: 'Timed out (5 s)' }
+    return { kind: 'error', message: 'Not reachable' }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// EndpointRow sub-component
+// ---------------------------------------------------------------------------
+
+function EndpointRow({
+  label, value, onChange, status, placeholder,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  status: PingStatus
+  placeholder: string
+}) {
+  const inputClass = [
+    'url-input',
+    status.kind === 'ok'    ? 'url-input--ok'    : '',
+    status.kind === 'error' ? 'url-input--error' : '',
+  ].filter(Boolean).join(' ')
+
+  return (
+    <div className="url-field">
+      <div className="settings-group-label">{label}</div>
+      <input
+        className={inputClass}
+        type="url"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        spellCheck={false}
+        autoComplete="off"
+      />
+      {status.kind !== 'idle' && (
+        <span className={`url-status url-status--${status.kind}`}>
+          {status.kind === 'checking' && 'Checking\u2026'}
+          {status.kind === 'ok'       && `\u2713 ${status.message}`}
+          {status.kind === 'error'    && `\u2717 ${status.message}`}
+        </span>
+      )}
+    </div>
+  )
+}
 
 interface SettingsModalProps {
   open: boolean
@@ -77,6 +158,72 @@ export function SettingsModal({
   open, settings, onSettingsChange, onClose,
   minPostCount, onMinPostCountChange,
 }: SettingsModalProps) {
+  const queryClient = useQueryClient()
+
+  // ── Endpoint override state ──────────────────────────────────────────────
+  const savedOverrides = getApiOverrides()
+  const [backendUrl,  setBackendUrl]  = useState(savedOverrides.backendUrl)
+  const [pipelineUrl, setPipelineUrl] = useState(savedOverrides.pipelineUrl)
+  const [backendStatus,  setBackendStatus]  = useState<PingStatus>({ kind: 'idle' })
+  const [pipelineStatus, setPipelineStatus] = useState<PingStatus>({ kind: 'idle' })
+  const backendTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pipelineTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function applyAndPing(
+    newBackend: string,
+    newPipeline: string,
+    field: 'backend' | 'pipeline',
+    setStatus: (s: PingStatus) => void,
+  ) {
+    // Persist both values together
+    try {
+      localStorage.setItem('api-endpoints', JSON.stringify({ backendUrl: newBackend, pipelineUrl: newPipeline }))
+    } catch { /* ignore */ }
+
+    // Apply to axios interceptors + invalidate cached queries
+    setApiOverrides(newBackend, newPipeline)
+    queryClient.invalidateQueries()
+
+    const urlToCheck = field === 'backend' ? newBackend : newPipeline
+    if (!urlToCheck) { setStatus({ kind: 'idle' }); return }
+
+    if (!isValidHttpUrl(urlToCheck)) {
+      setStatus({ kind: 'error', message: 'Invalid URL' })
+      return
+    }
+
+    setStatus({ kind: 'checking' })
+    pingHealth(urlToCheck).then(setStatus)
+  }
+
+  function handleBackendChange(value: string) {
+    setBackendUrl(value)
+    setBackendStatus({ kind: 'idle' })
+    if (backendTimer.current) clearTimeout(backendTimer.current)
+    backendTimer.current = setTimeout(() => applyAndPing(value, pipelineUrl, 'backend', setBackendStatus), 800)
+  }
+
+  function handlePipelineChange(value: string) {
+    setPipelineUrl(value)
+    setPipelineStatus({ kind: 'idle' })
+    if (pipelineTimer.current) clearTimeout(pipelineTimer.current)
+    pipelineTimer.current = setTimeout(() => applyAndPing(backendUrl, value, 'pipeline', setPipelineStatus), 800)
+  }
+
+  // Kick off a ping for any pre-filled values when the modal opens
+  useEffect(() => {
+    if (!open) return
+    if (savedOverrides.backendUrl && isValidHttpUrl(savedOverrides.backendUrl)) {
+      setBackendStatus({ kind: 'checking' })
+      pingHealth(savedOverrides.backendUrl).then(setBackendStatus)
+    }
+    if (savedOverrides.pipelineUrl && isValidHttpUrl(savedOverrides.pipelineUrl)) {
+      setPipelineStatus({ kind: 'checking' })
+      pingHealth(savedOverrides.pipelineUrl).then(setPipelineStatus)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
   if (!open) return null
 
   const set = <K extends keyof GraphSettings>(key: K, value: GraphSettings[K]) =>
@@ -90,6 +237,29 @@ export function SettingsModal({
           <button className="drawer-close" onClick={onClose} title="Close">✕</button>
         </div>
         <div className="modal-body">
+
+          <div className="settings-section">
+            <div className="settings-section-title">API Connections</div>
+            <div className="settings-group url-field-group">
+              <EndpointRow
+                label="Backend URL"
+                value={backendUrl}
+                onChange={handleBackendChange}
+                status={backendStatus}
+                placeholder="Default (proxied) — e.g. http://localhost:8000"
+              />
+            </div>
+            <div className="settings-group url-field-group">
+              <EndpointRow
+                label="Pipeline URL"
+                value={pipelineUrl}
+                onChange={handlePipelineChange}
+                status={pipelineStatus}
+                placeholder="Default (proxied) — e.g. http://localhost:8001"
+              />
+            </div>
+            <p className="url-field-hint">Leave blank to use the default proxied paths. Changes take effect immediately.</p>
+          </div>
 
           <div className="settings-section">
             <div className="settings-section-title">Graph Data</div>

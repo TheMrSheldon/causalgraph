@@ -149,6 +149,10 @@ html, body, #root {
   min-width: 320px;
   max-width: 480px;
   width: 100%;
+  /* Constrain to viewport so the header stays sticky and the body scrolls */
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-header {
@@ -156,14 +160,31 @@ html, body, #root {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--webis-border);
+  background: var(--webis-nav);
+  border-bottom: 1px solid hsl(0, 0%, 44.6%);
+  border-radius: 4px 4px 0 0;
+  flex-shrink: 0;
+  /* Extend header to cover the panel's light side borders at the top */
+  margin: -1px -1px 0;
+  border-top: 1px solid var(--webis-nav);
+  border-left: 1px solid var(--webis-nav);
+  border-right: 1px solid var(--webis-nav);
 }
 
 .modal-header h2 {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: var(--webis-heading);
+  color: #fff;
+}
+
+.modal-header .drawer-close {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.modal-header .drawer-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 .modal-body {
@@ -171,6 +192,8 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* ── Settings sections ───────────────────────────────────────────────── */
@@ -221,6 +244,75 @@ html, body, #root {
 
 .settings-number {
   width: 80px;
+}
+
+/* ── API endpoint URL fields ─────────────────────────────────────────── */
+
+.url-field-group {
+  gap: 4px;
+}
+
+.url-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+}
+
+.url-input {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--webis-border);
+  border-radius: 4px;
+  width: 100%;
+  box-sizing: border-box;
+  color: var(--webis-text);
+  background: #fff;
+  transition: border-color 0.15s;
+}
+
+.url-input:focus {
+  outline: none;
+  border-color: var(--webis-primary);
+  box-shadow: 0 0 0 2px rgba(30,135,240,0.12);
+}
+
+.url-input--ok    { border-color: var(--webis-success); }
+.url-input--error { border-color: var(--webis-danger);  }
+
+.url-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  width: fit-content;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.url-status--checking {
+  background: #e8f2fe;
+  color: #1565c0;
+}
+
+.url-status--ok {
+  background: #eafaf3;
+  color: #1a7a50;
+}
+
+.url-status--error {
+  background: #feecef;
+  color: #b71c3c;
+}
+
+.url-field-hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #999;
+  line-height: 1.4;
 }
 
 /* ── Stats modal rows ────────────────────────────────────────────────── */
