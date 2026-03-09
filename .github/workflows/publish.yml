@@ -50,8 +50,8 @@ jobs:
       - name: Build and push frontend
         uses: docker/build-push-action@v6
         with:
-          context: ${{ github.workspace }}
-          file: Dockerfile.frontend
+          context: ${{ github.workspace }}/frontend
+          file: Dockerfile.prod
           push: true
           tags: ${{ steps.meta.outputs.registry }}/causalgraph-frontend:${{ steps.meta.outputs.tag }}
           build-args: |

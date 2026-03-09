@@ -30,14 +30,14 @@ try {
 
 /**
  * Update the axios base URLs used by all subsequent API calls.
- * Pass empty strings to revert to the default proxied paths.
+ * Pass empty strings to revert to the build-time defaults (VITE_BACKEND_URL / VITE_PIPELINE_URL).
  */
 export function setApiOverrides(backendUrl: string, pipelineUrl: string): void {
   _backendOverride  = backendUrl
   _pipelineOverride = pipelineUrl
 }
 
-/** Returns the currently active overrides (may be empty strings = proxy default). */
+/** Returns the currently active overrides (may be empty strings = use build-time default). */
 export function getApiOverrides(): { backendUrl: string; pipelineUrl: string } {
   return { backendUrl: _backendOverride, pipelineUrl: _pipelineOverride }
 }
@@ -65,14 +65,35 @@ function mockPaths(causeQuery: string, effectQuery: string): PathsResponse {
 
 
 // ---------------------------------------------------------------------------
-// Axios instances with intercept-based URL overrides
+// Axios instances
 // ---------------------------------------------------------------------------
+// Base URLs are resolved in this priority order:
+//   1. Runtime override set via setApiOverrides() (persisted in localStorage)
+//   2. Runtime container env via window.__BACKEND_BASE_URL__ / __PIPELINE_BASE_URL__
+//      (sed-injected into index.html by the container entrypoint)
+//   3. Build-time env var  VITE_BACKEND_URL / VITE_PIPELINE_URL
+//   4. Relative fallback  /api  /  /pipeline  (proxied by lighttpd or Vite dev server)
 
-const http = axios.create({ baseURL: '/api' })
+declare global {
+  interface Window { __BACKEND_BASE_URL__?: string; __PIPELINE_BASE_URL__?: string }
+}
 
-// When a custom backend URL is set, rewrite the request URL to the full path
-// so the browser sends it cross-origin instead of through the local proxy.
-//   e.g.  baseURL='/api' + url='/graph'  →  'http://host:8000/api/graph'
+function _runtimeUrl(windowKey: keyof Window & string, viteMeta: string): string {
+  const win = (window as Window)[windowKey as keyof Window] as string | undefined
+  // Treat the literal placeholder (not yet replaced by sed) as absent
+  if (win && !win.startsWith('%%')) return win.replace(/\/$/, '')
+  if (viteMeta) return viteMeta.replace(/\/$/, '')
+  return ''
+}
+
+export const ENV_BACKEND_URL  = _runtimeUrl('__BACKEND_BASE_URL__',  (import.meta.env.VITE_BACKEND_URL  as string | undefined) ?? '')
+export const ENV_PIPELINE_URL = _runtimeUrl('__PIPELINE_BASE_URL__', (import.meta.env.VITE_PIPELINE_URL as string | undefined) ?? '')
+
+const http = axios.create({
+  baseURL: ENV_BACKEND_URL ? `${ENV_BACKEND_URL}/api` : '/api',
+})
+
+// Runtime override takes priority over the env-var base URL.
 http.interceptors.request.use((config) => {
   if (_backendOverride && config.url) {
     const path = config.url.startsWith('/') ? config.url : `/${config.url}`
@@ -82,12 +103,10 @@ http.interceptors.request.use((config) => {
   return config
 })
 
-const pipelineHttp = axios.create({ baseURL: '/pipeline' })
+const pipelineHttp = axios.create({
+  baseURL: ENV_PIPELINE_URL ? ENV_PIPELINE_URL : '/pipeline',
+})
 
-// Pipeline override: the user provides the full base including any path prefix,
-// so we just prepend it directly to the existing path.
-//   e.g.  url='/extract'  →  'http://host:8001/extract'
-//         url='/extract'  →  'http://host/pipeline/extract'  (via reverse proxy)
 pipelineHttp.interceptors.request.use((config) => {
   if (_pipelineOverride && config.url) {
     const path = config.url.startsWith('/') ? config.url : `/${config.url}`

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { setApiOverrides, getApiOverrides } from '../api/client'
+import { setApiOverrides, getApiOverrides, ENV_BACKEND_URL, ENV_PIPELINE_URL } from '../api/client'
 import type { AnimationSpeed, GraphSettings, LayoutAlgorithm, NodeSpacing, VisualizationMode } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -259,7 +259,7 @@ export function SettingsModal({
                 value={backendUrl}
                 onChange={handleBackendChange}
                 status={backendStatus}
-                placeholder="Default (proxied) — e.g. http://localhost:8000"
+                placeholder={ENV_BACKEND_URL || 'e.g. http://localhost:8000'}
               />
             </div>
             <div className="settings-group url-field-group">
@@ -268,10 +268,10 @@ export function SettingsModal({
                 value={pipelineUrl}
                 onChange={handlePipelineChange}
                 status={pipelineStatus}
-                placeholder="Default (proxied) — e.g. http://localhost:8001"
+                placeholder={ENV_PIPELINE_URL || 'e.g. http://localhost:8001'}
               />
             </div>
-            <p className="url-field-hint">Leave blank to use the default proxied paths. Changes take effect immediately.</p>
+            <p className="url-field-hint">Leave blank to use the default injected at container startup. Changes are persisted and take effect immediately.</p>
           </div>
 
           {isExplorer && (

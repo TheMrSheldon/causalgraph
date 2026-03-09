@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>r/science Causal Graph</title>
+    <!-- Placeholders replaced by the container entrypoint at runtime via sed -->
+    <script>
+      window.__BACKEND_BASE_URL__  = "%%BACKEND_BASE_URL%%";
+      window.__PIPELINE_BASE_URL__ = "%%PIPELINE_BASE_URL%%";
+    </script>
   </head>
   <body>
     <div id="root"></div>
