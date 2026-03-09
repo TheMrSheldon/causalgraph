@@ -16,9 +16,13 @@ GET  /health    — liveness check
 """
 from __future__ import annotations
 
+import copy
+import logging
 import os
 import re
+from contextlib import asynccontextmanager
 from functools import lru_cache
+from typing import AsyncGenerator
 
 # When running inside the Docker container, routes are mounted under /pipeline
 # so that the lighttpd reverse proxy can forward /pipeline/* without any path
@@ -34,6 +38,19 @@ from pydantic import BaseModel
 from pipeline.protocols import Post
 from pipeline.registry import build_canonizer, build_detector, build_extractor
 
+# Use uvicorn's own error logger so messages appear in the uvicorn console
+# output without needing to configure a separate handler.
+logger = logging.getLogger("uvicorn.error")
+
+# ── GPU detection (done once at import time) ─────────────────────────────────
+try:
+    import torch as _torch
+    _DEVICE: int = 0 if _torch.cuda.is_available() else -1
+    _GPU_NAME: str | None = _torch.cuda.get_device_name(0) if _DEVICE == 0 else None
+except Exception:
+    _DEVICE = -1
+    _GPU_NAME = None
+
 
 # ---------------------------------------------------------------------------
 # Config
@@ -45,9 +62,19 @@ def _get_config() -> dict:
         return yaml.safe_load(f)
 
 
+def _inject_device(config: dict, step_key: str, gpu_impls: set[str]) -> dict:
+    """Return a deep-copied config with device injected for GPU-capable steps."""
+    cfg = copy.deepcopy(config)
+    step_cfg = cfg["pipeline"][step_key]
+    if step_cfg.get("implementation") in gpu_impls and "device" not in step_cfg:
+        step_cfg["device"] = _DEVICE
+    return cfg
+
+
 @lru_cache(maxsize=1)
 def _get_detector():
-    return build_detector(_get_config())
+    cfg = _inject_device(_get_config(), "step1_detection", {"zero_shot"})
+    return build_detector(cfg)
 
 
 @lru_cache(maxsize=1)
@@ -57,7 +84,28 @@ def _get_extractor():
 
 @lru_cache(maxsize=1)
 def _get_canonizer():
-    return build_canonizer(_get_config())
+    cfg = _inject_device(_get_config(), "step3_canonization", {"transformer"})
+    return build_canonizer(cfg)
+
+
+# ── Startup: preload all models ───────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    if _DEVICE == 0:
+        logger.info("GPU detected: %s — pipeline will use CUDA device 0", _GPU_NAME)
+    else:
+        logger.info("No GPU detected — pipeline will run on CPU")
+
+    logger.info("Preloading pipeline components…")
+    for name, loader in [("detector", _get_detector), ("extractor", _get_extractor), ("canonizer", _get_canonizer)]:
+        try:
+            loader()
+            logger.info("  %s ready", name)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("  %s failed to preload: %s", name, exc)
+    logger.info("Pipeline server ready")
+    yield
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +196,7 @@ def create_app() -> FastAPI:
         title="Pipeline Step API",
         description="Per-step REST interface for the r/science causal pipeline.",
         version="0.2.0",
+        lifespan=lifespan,
     )
 
     app.add_middleware(

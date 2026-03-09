@@ -49,7 +49,7 @@ docs/               Architecture, getting-started, extending, graph format
 | Service | Command | Port | Purpose |
 |---------|---------|------|---------|
 | Backend API | `uvicorn api.main:app` | 8000 | Serves graph data from `pipeline.db` |
-| Pipeline server | `uvicorn pipeline.server:app` | 8001 | Per-step REST API (text analyzer) |
+| Pipeline server | `uvicorn pipeline.server:app --port 8001` | 8001 | Per-step REST API (text analyzer) |
 | Frontend | `npm run dev` | 5173 | Interactive graph UI |
 
 ## Swapping components
