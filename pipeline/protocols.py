@@ -154,33 +154,37 @@ class CausalExtractor(Protocol):
 @runtime_checkable
 class EventCanonizer(Protocol):
     """
-    Takes a list of CausalRelation objects (with raw cause/effect texts) and
-    returns them with cause_canonical / effect_canonical filled in.
+    Takes a list of (text, span) pairs and returns one canonical string per input.
 
-    The canonical description should be a self-contained phrase that makes
-    sense without the surrounding sentence — e.g. resolving pronouns,
-    expanding abbreviations, or reformulating truncated spans using the
-    original post title as context.
+    Each input pair:
+        text:  the surrounding text (e.g. a post title or sentence)
+        span:  (start, end) — character indices into ``text`` identifying the
+               event span to canonize.  ``text[start:end]`` is the raw span.
+
+    The canonical string should be a self-contained phrase that makes sense
+    without the surrounding sentence — e.g. resolving pronouns, expanding
+    abbreviations, or reformulating truncated spans using context from ``text``.
 
     Implementations:
       - PassthroughCanonizer  (pipeline.step3_canonization.passthrough_canonizer)
+      - TransformerCanonizer  (pipeline.step3_canonization.transformer_canonizer)
       - LLMCanonizer          (pipeline.step3_canonization.llm_canonizer)
     """
 
-    def canonize(self, relations: list[CausalRelation]) -> list[CausalRelation]:
+    def canonize(self, spans: list[tuple[str, tuple[int, int]]]) -> list[str]:
         """
         Args:
-            relations: Extracted CausalRelation objects (cause_canonical empty).
+            spans: list of (text, (start, end)) pairs.
+                   ``text[start:end]`` is the raw event span to canonize.
 
         Returns:
-            The same relations with cause_canonical / effect_canonical set.
-            Implementations should return new objects (or mutate in place).
+            A list of canonical strings, one per input span, in the same order.
         """
         ...
 
     @property
     def name(self) -> str:
-        """Unique registry key, e.g. 'passthrough', 'llm_anthropic'."""
+        """Unique registry key, e.g. 'passthrough', 'transformer', 'llm_anthropic'."""
         ...
 
 

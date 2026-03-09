@@ -16,33 +16,30 @@ The LLM is called in batches to minimize API latency.
 """
 from __future__ import annotations
 
-import dataclasses
 import json
 import os
 
-from pipeline.protocols import CausalRelation, EventCanonizer
+from pipeline.protocols import EventCanonizer
 
 _SYSTEM_PROMPT = """You are a scientific text editor.
 You will receive a JSON array of objects, each with:
-  - "title": the original r/science post title
-  - "cause": the extracted cause phrase
-  - "effect": the extracted effect phrase
+  - "text": a passage of text
+  - "span": a substring extracted from that passage
 
-For each object, rewrite "cause" and "effect" into self-contained, standalone
-event descriptions that make sense without the surrounding sentence.
+For each object, rewrite "span" into a self-contained, standalone description
+of the event or concept it refers to, using "text" as context where needed.
 Rules:
-  - Resolve pronouns and vague references using the title as context.
+  - Resolve pronouns and vague references using "text" as context.
   - Keep descriptions concise (2–8 words ideally).
   - Preserve the original meaning; do not introduce new claims.
-  - If the phrase is already self-contained, return it unchanged.
+  - If the span is already self-contained, return it unchanged.
 
-Return a JSON array (same length) where each element is an object with
-"cause" and "effect" keys containing the rewritten descriptions."""
+Return a JSON array (same length as input) of canonical strings."""
 
-_USER_TEMPLATE = """Events:
-{events_json}
+_USER_TEMPLATE = """Spans:
+{spans_json}
 
-Return only the JSON array."""
+Return only the JSON array of strings."""
 
 
 class LLMCanonizer:
@@ -67,46 +64,31 @@ class LLMCanonizer:
     def name(self) -> str:
         return f"llm_{self._provider}"
 
-    def canonize(self, relations: list[CausalRelation]) -> list[CausalRelation]:
-        # We need the post title for context, but CausalRelation only stores post_id.
-        # We batch-canonize purely on the extracted spans; for full title-context
-        # canonization, subclass this and pass a post_id → title lookup.
-        results: list[CausalRelation] = []
-        for i in range(0, len(relations), self.batch_size):
-            batch = relations[i : i + self.batch_size]
-            canonized = self._canonize_batch(batch)
-            results.extend(canonized)
+    def canonize(self, spans: list[tuple[str, tuple[int, int]]]) -> list[str]:
+        results: list[str] = []
+        for i in range(0, len(spans), self.batch_size):
+            batch = spans[i : i + self.batch_size]
+            results.extend(self._canonize_batch(batch))
         return results
 
-    def _canonize_batch(self, batch: list[CausalRelation]) -> list[CausalRelation]:
-        events = [
-            {"cause": r.cause_text, "effect": r.effect_text}
-            for r in batch
+    def _canonize_batch(self, batch: list[tuple[str, tuple[int, int]]]) -> list[str]:
+        items = [
+            {"text": text, "span": text[start:end]}
+            for text, (start, end) in batch
         ]
-        user_msg = _USER_TEMPLATE.format(events_json=json.dumps(events, ensure_ascii=False))
+        user_msg = _USER_TEMPLATE.format(spans_json=json.dumps(items, ensure_ascii=False))
         try:
             if self._provider == "anthropic":
                 raw = self._call_anthropic(user_msg)
             else:
                 raw = self._call_openai(user_msg)
-            parsed: list[dict] = json.loads(raw)
+            parsed: list = json.loads(raw)
             if len(parsed) != len(batch):
                 raise ValueError(f"Expected {len(batch)} items, got {len(parsed)}")
+            return [str(s) if s else text[start:end] for s, (text, (start, end)) in zip(parsed, batch)]
         except Exception as e:
             print(f"[LLMCanonizer] API/parse error: {e}. Falling back to passthrough for batch.")
-            return [
-                dataclasses.replace(r, cause_canonical=r.cause_text, effect_canonical=r.effect_text)
-                for r in batch
-            ]
-
-        return [
-            dataclasses.replace(
-                r,
-                cause_canonical=item.get("cause", r.cause_text) or r.cause_text,
-                effect_canonical=item.get("effect", r.effect_text) or r.effect_text,
-            )
-            for r, item in zip(batch, parsed)
-        ]
+            return [text[start:end] for text, (start, end) in batch]
 
     def _call_anthropic(self, user_msg: str) -> str:
         import anthropic

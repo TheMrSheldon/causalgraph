@@ -36,9 +36,7 @@ relations sharing the same key reuse the cached result.
 """
 from __future__ import annotations
 
-import dataclasses
-
-from pipeline.protocols import CausalRelation, EventCanonizer
+from pipeline.protocols import EventCanonizer
 
 
 # ---------------------------------------------------------------------------
@@ -210,42 +208,40 @@ class TransformerCanonizer:
     # Public interface
     # ------------------------------------------------------------------
 
-    def canonize(self, relations: list[CausalRelation]) -> list[CausalRelation]:
-        if not relations:
+    def canonize(self, spans: list[tuple[str, tuple[int, int]]]) -> list[str]:
+        if not spans:
             return []
 
-        # 1. Collect unique (span_lower, sentence) keys in order
-        key_to_orig: dict[tuple[str, str], str] = {}
+        # 1. Collect unique (span_lower, text) keys in insertion order
+        #    to avoid redundant inference for identical spans in the same context.
+        key_to_raw: dict[tuple[str, str], str] = {}   # (span_lower, text) → raw span
         model_keys: list[tuple[str, str]] = []
         seen: set[tuple[str, str]] = set()
 
-        def _register(span: str, sentence: str) -> None:
-            key = (span.lower(), sentence)
+        input_keys: list[tuple[str, str]] = []
+        for text, (start, end) in spans:
+            raw_span = text[start:end]
+            key = (raw_span.lower(), text)
+            input_keys.append(key)
             if key not in seen:
                 seen.add(key)
-                key_to_orig[key] = span
+                key_to_raw[key] = raw_span
                 model_keys.append(key)
-
-        for r in relations:
-            _register(r.cause_text, r.post_title)
-            _register(r.effect_text, r.post_title)
 
         # 2. Build chat messages for each unique key
         examples = [
             msg
-            for text, span, canon in _EXAMPLES
+            for ex_text, ex_span, ex_canon in _EXAMPLES
             for msg in (
-                {"role": "user", "content": _make_prompt(text, span)},
-                {"role": "assistant", "content": canon},
+                {"role": "user", "content": _make_prompt(ex_text, ex_span)},
+                {"role": "assistant", "content": ex_canon},
             )
         ]
         message_lists = [
             [
                 {"role": "system", "content": _SYSTEM},
-                # Examples
                 *examples,
-                # Current query
-                {"role": "user", "content": _make_prompt(key[1], key_to_orig[key])},
+                {"role": "user", "content": _make_prompt(key[1], key_to_raw[key])},
             ]
             for key in model_keys
         ]
@@ -254,7 +250,7 @@ class TransformerCanonizer:
         n = len(message_lists)
         print(
             f"[TransformerCanonizer] Canonizing {n:,} unique spans "
-            f"({len(relations):,} relations total) …"
+            f"({len(spans):,} spans total) …"
         )
         all_outputs: list[str] = []
         for start in range(0, n, self.batch_size):
@@ -264,22 +260,14 @@ class TransformerCanonizer:
             if done % max(self.batch_size * 10, 1) == 0 or done == n:
                 print(f"  {done:,}/{n:,} spans processed …")
 
-        # 4. Build canonical lookup
+        # 4. Build lookup: unique key → canonical string
         key_to_canonical: dict[tuple[str, str], str] = {
-            key: _clean(out, key_to_orig[key])
+            key: _clean(out, key_to_raw[key])
             for key, out in zip(model_keys, all_outputs)
         }
 
-        # 5. Assemble result relations
+        # 5. Return one canonical per input span (reusing cached results)
         return [
-            dataclasses.replace(
-                r,
-                cause_canonical=key_to_canonical.get(
-                    (r.cause_text.lower(), r.post_title), r.cause_text
-                ),
-                effect_canonical=key_to_canonical.get(
-                    (r.effect_text.lower(), r.post_title), r.effect_text
-                ),
-            )
-            for r in relations
+            key_to_canonical.get(key, key_to_raw.get(key, ""))
+            for key in input_keys
         ]

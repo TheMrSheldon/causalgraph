@@ -261,12 +261,21 @@ def create_app() -> FastAPI:
                 rel.post_title = text  # full input text as canonization context
                 raw_relations.append((rel, sent_text, sent_offset))
 
-        # Canonize all at once
+        # Build (text, (start, end)) span inputs for the canonizer —
+        # cause then effect for each relation, using the full input as context.
+        def _span_idx(ctx: str, phrase: str) -> tuple[int, int]:
+            idx = ctx.lower().find(phrase.lower())
+            return (idx, idx + len(phrase)) if idx != -1 else (0, len(phrase))
+
         if raw_relations:
-            just_rels = [r for r, _, _ in raw_relations]
-            canonized = canonizer.canonize(just_rels)
+            span_inputs: list[tuple[str, tuple[int, int]]] = []
+            for rel, _, _ in raw_relations:
+                ctx = rel.post_title  # full input text
+                span_inputs.append((ctx, _span_idx(ctx, rel.cause_text)))
+                span_inputs.append((ctx, _span_idx(ctx, rel.effect_text)))
+            canonical_strings = canonizer.canonize(span_inputs)
         else:
-            canonized = []
+            canonical_strings = []
 
         # Build events + response relations
         event_index_map: dict[str, int] = {}
@@ -291,28 +300,30 @@ def create_app() -> FastAPI:
             ))
             return idx
 
-        for canon_rel, (_, sent_text, sent_offset) in zip(canonized, raw_relations):
+        for i, (rel, sent_text, sent_offset) in enumerate(raw_relations):
+            cause_canonical = canonical_strings[i * 2] if canonical_strings else rel.cause_text
+            effect_canonical = canonical_strings[i * 2 + 1] if canonical_strings else rel.effect_text
             cause_idx = _get_or_add_event(
-                canon_rel.cause_text, sent_text, sent_offset,
-                description=canon_rel.cause_canonical or canon_rel.cause_text,
+                rel.cause_text, sent_text, sent_offset,
+                description=cause_canonical,
             )
             effect_idx = _get_or_add_event(
-                canon_rel.effect_text, sent_text, sent_offset,
-                description=canon_rel.effect_canonical or canon_rel.effect_text,
+                rel.effect_text, sent_text, sent_offset,
+                description=effect_canonical,
             )
             if cause_idx is None or effect_idx is None:
                 continue
             relations.append(RelationItem(
                 cause_event_index=cause_idx,
                 effect_event_index=effect_idx,
-                cause_text=canon_rel.cause_text,
-                effect_text=canon_rel.effect_text,
-                cause_canonical=canon_rel.cause_canonical,
-                effect_canonical=canon_rel.effect_canonical,
-                is_countercausal=canon_rel.is_countercausal,
-                p_none=canon_rel.p_none,
-                p_causal=canon_rel.p_causal,
-                p_countercausal=canon_rel.p_countercausal,
+                cause_text=rel.cause_text,
+                effect_text=rel.effect_text,
+                cause_canonical=cause_canonical,
+                effect_canonical=effect_canonical,
+                is_countercausal=rel.is_countercausal,
+                p_none=rel.p_none,
+                p_causal=rel.p_causal,
+                p_countercausal=rel.p_countercausal,
             ))
 
         return ExtractResponse(text=text, events=events, relations=relations)

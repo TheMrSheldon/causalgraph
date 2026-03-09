@@ -123,24 +123,52 @@ def run_step2(
     return len(all_relations)
 
 
+def _span_indices(text: str, span: str) -> tuple[int, int]:
+    """Return (start, end) of ``span`` inside ``text`` (case-insensitive).
+    Falls back to (0, len(span)) when not found so callers always get a valid range."""
+    idx = text.lower().find(span.lower())
+    if idx == -1:
+        return (0, len(span))
+    return (idx, idx + len(span))
+
+
 def run_step3(
     canonizer: EventCanonizer,
     db: Database,
 ) -> int:
     """Canonize event descriptions. Returns count of canonized relations."""
+    import dataclasses
+    import sqlite3
+
     print(f"[Step 3] Using '{canonizer.name}' canonizer")
     relations = db.get_all_relations()
 
-    import sqlite3
     conn = sqlite3.connect(db.db_path)
     relation_ids = [r[0] for r in conn.execute("SELECT id FROM causal_relations ORDER BY id").fetchall()]
     conn.close()
 
-    print(f"[Step 3] Canonizing {len(relations):,} relations...")
+    # Build flat (text, (start, end)) list: cause then effect for each relation.
+    span_inputs: list[tuple[str, tuple[int, int]]] = []
+    for r in relations:
+        ctx = r.post_title or r.cause_text  # use title as context when available
+        span_inputs.append((ctx, _span_indices(ctx, r.cause_text)))
+        ctx = r.post_title or r.effect_text
+        span_inputs.append((ctx, _span_indices(ctx, r.effect_text)))
+
+    print(f"[Step 3] Canonizing {len(relations):,} relations ({len(span_inputs):,} spans)…")
     run_id = db.start_run("canonization", canonizer.name, rows_in=len(relations))
     try:
         t0 = time.perf_counter()
-        canonized = canonizer.canonize(relations)
+        canonical_strings = canonizer.canonize(span_inputs)
+        # Map flat results back: index i*2 = cause, i*2+1 = effect
+        canonized = [
+            dataclasses.replace(
+                r,
+                cause_canonical=canonical_strings[i * 2],
+                effect_canonical=canonical_strings[i * 2 + 1],
+            )
+            for i, r in enumerate(relations)
+        ]
         db.update_canonical_fields(canonized, relation_ids)
         db.finish_run(run_id, rows_out=len(canonized))
         elapsed = time.perf_counter() - t0
