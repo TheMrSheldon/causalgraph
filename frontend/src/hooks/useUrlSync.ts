@@ -83,16 +83,29 @@ export function syncUrlState(state: UrlState, replace = true): void {
 
 /**
  * Build a shareable URL for a specific post entry.
- * includeGraphState=false  → just the current path + ?post=<id>
- * includeGraphState=true   → current full URL with post= added/replaced
+ *
+ * includeGraphState=false → path + sidebar context (node= or edge=) + post=<id>
+ *                           enough to open the correct detail view and highlight the post
+ * includeGraphState=true  → full current URL with post= added/replaced
+ *                           preserves expanded clusters, focus stack, endpoint overrides, etc.
  */
 export function buildShareUrl(postId: string, includeGraphState: boolean): string {
-  const origin = window.location.origin
-  const path   = window.location.pathname
+  const origin  = window.location.origin
+  const path    = window.location.pathname
+  const current = new URLSearchParams(window.location.search)
+
   if (includeGraphState) {
-    const params = new URLSearchParams(window.location.search)
+    const params = new URLSearchParams(current)
     params.set('post', postId)
     return `${origin}${path}?${params.toString()}`
   }
-  return `${origin}${path}?post=${encodeURIComponent(postId)}`
+
+  // "Post only": keep just the sidebar context + post; drop expanded/focus/backend/pipeline
+  const minimal = new URLSearchParams()
+  const node = current.get('node')
+  const edge = current.get('edge')
+  if (node) minimal.set('node', node)
+  else if (edge) minimal.set('edge', edge)
+  minimal.set('post', postId)
+  return `${origin}${path}?${minimal.toString()}`
 }
