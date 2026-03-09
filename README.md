@@ -6,11 +6,13 @@ Extract causal relationships from 867K r/science submission titles and explore t
 
 ```bash
 # 1. Install Python deps
-pip install -e ".[dev]"
-python -m spacy download en_core_web_sm
+pip install -r api/requirements.txt -r pipeline/requirements.txt
+
+# Install spaCy model (CLI broken on Python 3.14 — use wheel directly)
+pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
 # 2. Run the pipeline (writes data/pipeline.db)
-python scripts/run_pipeline.py
+python -m pipeline.runner
 
 # 3. Start the backend API  (terminal 1)
 uvicorn api.main:app --host 0.0.0.0 --port 8000
@@ -24,7 +26,7 @@ cd frontend && npm install && npm run dev
 
 Open **http://localhost:5173** — double-click nodes to expand, click edges to see source posts.
 
-The **Text Analyzer** feature (type any sentence to extract causal relations live) requires the pipeline server (step 4).
+The **Text Analyzer** feature (type any sentence to extract causal relationships live) requires the pipeline server (step 4).
 
 ## Documentation
 
@@ -36,10 +38,10 @@ The **Text Analyzer** feature (type any sentence to extract causal relations liv
 ## Structure
 
 ```
-pipeline/           Python pipeline (3 pluggable steps) + pipeline REST server
+pipeline/           Python pipeline (4 pluggable steps) + pipeline REST server
 api/                FastAPI backend (reads pipeline.db; no pipeline imports)
 frontend/           React + Cytoscape.js UI
-config.yaml         Swap implementations without code changes
+pipeline.yaml       Pipeline configuration — swap implementations without code changes
 data/pipeline.db    SQLite output (created by pipeline)
 docs/               Architecture, getting-started, extending, graph format
 ```
@@ -54,12 +56,16 @@ docs/               Architecture, getting-started, extending, graph format
 
 ## Swapping components
 
-Edit `config.yaml`:
+Edit `pipeline.yaml` and use the fully-qualified class name:
 
 ```yaml
-pipeline:
-  step1_identification:
-    implementation: "llm_anthropic"   # was "regex"
-  step3_hierarchy:
-    implementation: "tfidf_ward"      # was "embedding_hdbscan"
+step1_detection:
+  implementation: "pipeline.step1_detection.regex_detector.RegexDetector"
+
+step3_canonization:
+  implementation: "pipeline.step3_canonization.transformer_canonizer.TransformerCanonizer"
+  model_name: "Qwen/Qwen2.5-1.5B-Instruct"
+
+step4_hierarchy:
+  implementation: "pipeline.step4_hierarchy.tfidf_clusterer.TFIDFClusterer"
 ```

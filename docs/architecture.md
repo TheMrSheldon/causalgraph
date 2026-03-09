@@ -8,7 +8,7 @@ The project extracts causal claims from 867K Reddit r/science submission titles,
 
 ```mermaid
 flowchart LR
-    A[(rscience-submissions.parquet\n867K titles)] -->|DuckDB stream| B
+    A[(rscience-submissions.parquet\n867K titles)] -->|PyArrow stream| B
 
     subgraph Pipeline["Pipeline (offline)"]
         B[Step 1\nCausality Detection] -->|causal posts| C
@@ -26,7 +26,7 @@ flowchart LR
     end
 ```
 
-Each pipeline step is **independently pluggable**: the implementation is selected at runtime via `config.yaml` without any code changes.
+Each pipeline step is **independently pluggable**: the implementation is selected at runtime via `pipeline.yaml` without any code changes.
 
 The backend API (`api/`) and the pipeline (`pipeline/`) share **no Python imports** — they are connected only through the SQLite database. See [graphformat.md](graphformat.md) for the schema contract.
 
@@ -43,7 +43,6 @@ The backend API (`api/`) and the pipeline (`pipeline/`) share **no Python import
 | `HierarchyInferrer` | Cluster events into multi-level hierarchy | `pipeline/step4_hierarchy/` |
 | `Database` (pipeline) | SQLite DAL — schema, writes, graph queries | `pipeline/db.py` |
 | `GraphDatabase` (API) | Read-only SQLite access for graph queries | `api/db.py` |
-| `Registry` | Load implementations from `config.yaml` | `pipeline/registry.py` |
 | Backend API | Serve graph data over REST | `api/` |
 | Pipeline Server | Per-step REST API for live text analysis | `pipeline/server.py` |
 | React + Cytoscape.js | Interactive hierarchical causal graph | `frontend/` |
@@ -160,7 +159,7 @@ erDiagram
 
 ## Pluggable Interfaces
 
-Each pipeline step is defined as a Python `Protocol` (structural typing). Swap implementations by changing one line in `config.yaml`.
+Each pipeline step is defined as a Python `Protocol` (structural typing). Swap implementations by changing one line in `pipeline.yaml`.
 
 ```mermaid
 classDiagram
@@ -178,7 +177,7 @@ classDiagram
 
     class EventCanonizer {
         <<Protocol>>
-        +canonize(relations: list[CausalRelation]) list[CausalRelation]
+        +canonize(spans: list[tuple]) list[str]
         +name: str
     }
 
@@ -189,25 +188,21 @@ classDiagram
     }
 
     CausalityDetector <|.. RegexDetector : implements
-    CausalityDetector <|.. LLMDetector : implements
-    CausalityDetector <|.. ZeroShotDetector : implements
 
     CausalExtractor <|.. RegexSpacyExtractor : implements
-    CausalExtractor <|.. LLMExtractor : implements
 
     EventCanonizer <|.. PassthroughCanonizer : implements
-    EventCanonizer <|.. LLMCanonizer : implements
+    EventCanonizer <|.. TransformerCanonizer : implements
 
     HierarchyInferrer <|.. EmbeddingWardClusterer : implements
     HierarchyInferrer <|.. TFIDFClusterer : implements
-    HierarchyInferrer <|.. LLMTopicGrouper : implements
 ```
 
 ---
 
 ## Hierarchy Model
 
-Events are organized into a multi-level tree. The number of levels is configured via `n_clusters_per_level` in `config.yaml` — the list length determines the number of levels. The frontend renders the topmost level on load and supports drill-down via double-click.
+Events are organized into a multi-level tree. The number of levels is configured via `n_clusters_per_level` in `pipeline.yaml` — the list length determines the number of levels. The frontend renders the topmost level on load and supports drill-down via double-click.
 
 ```mermaid
 graph TD

@@ -17,13 +17,13 @@ step3_canonization:
   # TransformerCanonizer options
   # Default: Qwen2.5-1.5B-Instruct (~3 GB RAM on CPU)
   # Upgrade: Qwen/Qwen2.5-3B-Instruct or mistralai/Mistral-7B-Instruct-v0.3
-  model_name: "Qwen/Qwen2.5-1.5B-Instruct"
+  model_name: "Qwen/Qwen2.5-3B-Instruct"
   batch_size: 8          # Prompts per batch; increase for GPU (32–64)
   max_new_tokens: 24     # Max output tokens; event spans are short
   device: 0              # -1 = CPU; 0 = first CUDA GPU
 
 step4_hierarchy:
-  implementation: "pipeline.step4_hierarchy.embedding_ward_clusterer.EmbeddingWardClusterer"
+  implementation: "pipeline.step4_hierarchy.embedding_clusterer.EmbeddingClusterer"
 
   # EmbeddingWardClusterer options
   embedding_model: "all-MiniLM-L6-v2"

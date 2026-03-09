@@ -1,6 +1,6 @@
 # Graph Database Format
 
-The backend API (`api/`) reads from a SQLite database produced by the pipeline (`pipeline/`). The two components share **no code** — only this file format. The default path is `data/pipeline.db` (configured in `config.yaml` under `api.db_path`).
+The backend API (`api/`) reads from a SQLite database produced by the pipeline (`pipeline/`). The two components share **no code** — only this file format. The default path is `data/pipeline.db`, overridable via the `GRAPH_DB_PATH` environment variable.
 
 ---
 

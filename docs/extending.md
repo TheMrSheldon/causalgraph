@@ -31,36 +31,19 @@ class MyDetector:
 > [!IMPORTANT]
 > Accept `**kwargs` in `__init__` so the registry can pass unrecognized config keys without errors.
 
-**2. Register it**
+**2. Configure it**
 
-In `pipeline/registry.py`, add an entry to `_STEP1_REGISTRY`:
-
-```python
-_STEP1_REGISTRY: dict[str, tuple[str, str]] = {
-    ...
-    "my_detector": (
-        "pipeline.step1_detection.my_detector",
-        "MyDetector",
-    ),
-}
-```
-
-**3. Configure it**
-
-In `config.yaml`:
+In `pipeline.yaml`:
 
 ```yaml
-pipeline:
-  step1_detection:
-    implementation: "my_detector"
-    my_param: 0.8
+step1_detection:
+  implementation: "pipeline.step1_detection.my_detector.MyDetector"
+  my_param: 0.8
 ```
 
-**4. Test it**
+**3. Test it**
 
-The registry validates Protocol conformance at load time using `isinstance()` on the `@runtime_checkable` Protocol. If your class is missing required methods, you'll get a `TypeError` immediately.
-
-The new implementation is automatically available in the pipeline server (`uvicorn pipeline.server:app`) without any changes — it uses the same `config.yaml`.
+The new implementation is automatically available in the pipeline server (`uvicorn pipeline.server:app`) without any changes — it uses the same `pipeline.yaml`.
 
 ---
 
@@ -70,8 +53,7 @@ The new implementation is automatically available in the pipeline server (`uvico
 
 ```python
 # pipeline/step3_canonization/my_canonizer.py
-from pipeline.protocols import CausalRelation, EventCanonizer
-import dataclasses
+from pipeline.protocols import EventCanonizer
 
 class MyCanonizer:
     def __init__(self, **kwargs) -> None:
@@ -81,20 +63,15 @@ class MyCanonizer:
     def name(self) -> str:
         return "my_canonizer"
 
-    def canonize(self, relations: list[CausalRelation]) -> list[CausalRelation]:
+    def canonize(self, spans: list[tuple[str, tuple[int, int]]]) -> list[str]:
         result = []
-        for r in relations:
-            canonical_cause = self._enrich(r.cause_text, r.post_id)
-            canonical_effect = self._enrich(r.effect_text, r.post_id)
-            result.append(dataclasses.replace(
-                r,
-                cause_canonical=canonical_cause,
-                effect_canonical=canonical_effect,
-            ))
+        for text, (start, end) in spans:
+            raw_span = text[start:end]
+            result.append(self._enrich(raw_span, text))
         return result
 ```
 
-**2. Register and configure** (same pattern as above, using `_STEP3_REGISTRY` and `step3_canonization` config key).
+**2. Configure it** (same pattern as above, using the `step3_canonization` key in `pipeline.yaml`).
 
 ---
 
@@ -147,7 +124,7 @@ classDiagram
 
     class EventCanonizer {
         <<Protocol>>
-        +canonize(relations) list[CausalRelation]
+        +canonize(spans: list[tuple]) list[str]
         +name: str
     }
 
