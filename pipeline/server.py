@@ -76,20 +76,9 @@ def _get_config() -> dict:
         return yaml.safe_load(f)
 
 
-def _inject_device(step_cfg: dict, gpu_class_names: set[str]) -> dict:
-    """Return a copy of step_cfg with device injected when the class is GPU-capable."""
-    cfg = copy.deepcopy(step_cfg)
-    class_name = cfg.get("implementation", "").rpartition(".")[2]
-    if class_name in gpu_class_names and "device" not in cfg:
-        cfg["device"] = _DEVICE
-    return cfg
-
-
 @lru_cache(maxsize=1)
 def _get_detector():
-    pipeline_cfg = _get_config()["pipeline"]
-    step_cfg = _inject_device(pipeline_cfg["step1_detection"], {"ZeroShotDetector"})
-    return _build(step_cfg, CausalityDetector)
+    return _build(_get_config()["pipeline"]["step1_detection"], CausalityDetector)
 
 
 @lru_cache(maxsize=1)
@@ -99,8 +88,10 @@ def _get_extractor():
 
 @lru_cache(maxsize=1)
 def _get_canonizer():
-    pipeline_cfg = _get_config()["pipeline"]
-    step_cfg = _inject_device(pipeline_cfg["step3_canonization"], {"TransformerCanonizer"})
+    step_cfg = copy.deepcopy(_get_config()["pipeline"]["step3_canonization"])
+    # Inject GPU device for TransformerCanonizer unless already specified
+    if step_cfg.get("implementation", "").endswith("TransformerCanonizer") and "device" not in step_cfg:
+        step_cfg["device"] = _DEVICE
     return _build(step_cfg, EventCanonizer)
 
 

@@ -2,57 +2,28 @@ pipeline:
   parquet_path: "rscience-submissions.parquet"
   db_path: "data/pipeline.db"
   batch_size: 5000        # Posts per batch for step 1
-  min_score: 1            # Skip posts with score below this
+  min_score: 0            # Skip posts with score below this
 
   step1_detection:
     implementation: "pipeline.step1_detection.regex_detector.RegexDetector"
-    # Alternatives:
-    #   pipeline.step1_detection.llm_detector.LLMDetector
-    #   pipeline.step1_detection.zero_shot_detector.ZeroShotDetector
-
-    # Zero-shot options (only used with ZeroShotDetector)
-    zero_shot_model: "facebook/bart-large-mnli"
-    zero_shot_threshold: 0.75
-
-    # LLM options (only used with LLMDetector)
-    llm_model: "claude-haiku-4-5-20251001"
-    llm_batch_size: 50
 
   step2_extraction:
     implementation: "pipeline.step2_extraction.regex_spacy_extractor.RegexSpacyExtractor"
-    # Alternatives:
-    #   pipeline.step2_extraction.llm_extractor.LLMExtractor
     spacy_model: "en_core_web_sm"   # or en_core_web_trf for better accuracy
-
-    # LLM options (only used with LLMExtractor)
-    llm_model: "claude-haiku-4-5-20251001"
-    llm_max_tokens: 512
 
   step3_canonization:
     implementation: "pipeline.step3_canonization.transformer_canonizer.TransformerCanonizer"
-    # Alternatives:
-    #   pipeline.step3_canonization.passthrough_canonizer.PassthroughCanonizer
-    #   pipeline.step3_canonization.llm_canonizer.LLMCanonizer
 
     # TransformerCanonizer options
     # Default: Qwen2.5-1.5B-Instruct (~3 GB RAM on CPU)
     # Upgrade: Qwen/Qwen2.5-3B-Instruct or mistralai/Mistral-7B-Instruct-v0.3
     model_name: "Qwen/Qwen2.5-1.5B-Instruct"
-    batch_size: 8                      # Prompts per batch; increase for GPU (32–64)
-    max_new_tokens: 24                 # Max output tokens; event spans are short
-    device: 0                          # -1 = CPU; 0 = first CUDA GPU
-
-    # LLM options (only used with LLMCanonizer)
-    llm_model: "claude-haiku-4-5-20251001"
-    llm_batch_size: 50
-    llm_max_tokens: 1024
+    batch_size: 8          # Prompts per batch; increase for GPU (32–64)
+    max_new_tokens: 24     # Max output tokens; event spans are short
+    device: 0              # -1 = CPU; 0 = first CUDA GPU
 
   step4_hierarchy:
     implementation: "pipeline.step4_hierarchy.embedding_ward_clusterer.EmbeddingWardClusterer"
-    # Alternatives:
-    #   pipeline.step4_hierarchy.tfidf_clusterer.TFIDFClusterer
-    #   pipeline.step4_hierarchy.embedding_clusterer.EmbeddingClusterer
-    #   pipeline.step4_hierarchy.llm_topic_grouper.LLMTopicGrouper
 
     # EmbeddingWardClusterer options
     embedding_model: "all-MiniLM-L6-v2"
@@ -62,17 +33,13 @@ pipeline:
     max_texts: 8000    # O(n^2) memory cap; texts beyond this assigned by nearest centroid
     use_norm: false    # false = embed canonical description; true = embed lowercased norm
 
-    # TF-IDF options (only used when implementation = tfidf_ward)
+    # TFIDFClusterer options
     tfidf_max_features: 5000
     tfidf_n_top_clusters: 200
 
-    # Embedding HDBSCAN options (only used when implementation = embedding_hdbscan)
+    # EmbeddingClusterer (HDBSCAN) options
     min_cluster_size: 10
     min_samples: 5
-
-    # LLM options (only used when implementation = llm)
-    llm_model: "claude-haiku-4-5-20251001"
-    llm_n_topics: 30
 
 api:
   host: "0.0.0.0"

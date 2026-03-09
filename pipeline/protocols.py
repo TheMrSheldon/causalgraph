@@ -89,11 +89,6 @@ class CausalityDetector(Protocol):
     """
     Scans a batch of Post objects and returns those that express
     a causal relationship (explicit or implicit).
-
-    Implementations:
-      - RegexDetector      (pipeline.step1_detection.regex_detector)
-      - LLMDetector        (pipeline.step1_detection.llm_detector)
-      - ZeroShotDetector   (pipeline.step1_detection.zero_shot_detector)
     """
 
     def detect(self, posts: list[Post]) -> list[Post]:
@@ -122,10 +117,6 @@ class CausalExtractor(Protocol):
     """
     Given a Post confirmed to express causality, extracts one or more
     (cause, effect) pairs as CausalRelation objects.
-
-    Implementations:
-      - RegexSpacyExtractor  (pipeline.step2_extraction.regex_spacy_extractor)
-      - LLMExtractor         (pipeline.step2_extraction.llm_extractor)
     """
 
     def extract(self, post: Post) -> list[CausalRelation]:
@@ -164,11 +155,6 @@ class EventCanonizer(Protocol):
     The canonical string should be a self-contained phrase that makes sense
     without the surrounding sentence — e.g. resolving pronouns, expanding
     abbreviations, or reformulating truncated spans using context from ``text``.
-
-    Implementations:
-      - PassthroughCanonizer  (pipeline.step3_canonization.passthrough_canonizer)
-      - TransformerCanonizer  (pipeline.step3_canonization.transformer_canonizer)
-      - LLMCanonizer          (pipeline.step3_canonization.llm_canonizer)
     """
 
     def canonize(self, spans: list[tuple[str, tuple[int, int]]]) -> list[str]:
@@ -197,12 +183,6 @@ class HierarchyInferrer(Protocol):
     """
     Takes all CausalRelation objects and groups cause/effect event texts
     into a multi-level cluster hierarchy.
-
-    Implementations:
-      - EmbeddingClusterer    (pipeline.step4_hierarchy.embedding_clusterer)
-      - TFIDFClusterer        (pipeline.step4_hierarchy.tfidf_clusterer)
-      - EmbeddingWardClusterer(pipeline.step4_hierarchy.embedding_ward_clusterer)
-      - LLMTopicGrouper       (pipeline.step4_hierarchy.llm_topic_grouper)
     """
 
     def infer(
