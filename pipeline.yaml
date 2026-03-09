@@ -1,0 +1,42 @@
+parquet_path: "rscience-submissions.parquet"
+db_path: "data/pipeline.db"
+batch_size: 5000        # Posts per batch for step 1
+min_score: 0            # Skip posts with score below this
+
+
+step1_detection:
+  implementation: "pipeline.step1_detection.regex_detector.RegexDetector"
+
+step2_extraction:
+  implementation: "pipeline.step2_extraction.regex_spacy_extractor.RegexSpacyExtractor"
+  spacy_model: "en_core_web_sm"   # or en_core_web_trf for better accuracy
+
+step3_canonization:
+  implementation: "pipeline.step3_canonization.transformer_canonizer.TransformerCanonizer"
+
+  # TransformerCanonizer options
+  # Default: Qwen2.5-1.5B-Instruct (~3 GB RAM on CPU)
+  # Upgrade: Qwen/Qwen2.5-3B-Instruct or mistralai/Mistral-7B-Instruct-v0.3
+  model_name: "Qwen/Qwen2.5-1.5B-Instruct"
+  batch_size: 8          # Prompts per batch; increase for GPU (32–64)
+  max_new_tokens: 24     # Max output tokens; event spans are short
+  device: 0              # -1 = CPU; 0 = first CUDA GPU
+
+step4_hierarchy:
+  implementation: "pipeline.step4_hierarchy.embedding_ward_clusterer.EmbeddingWardClusterer"
+
+  # EmbeddingWardClusterer options
+  embedding_model: "all-MiniLM-L6-v2"
+  linkage_method: "ward"
+  n_clusters_per_level: [500, 100, 20]  # clusters at each level, finest → coarsest
+                                         # list length = number of levels (no upper limit)
+  max_texts: 8000    # O(n^2) memory cap; texts beyond this assigned by nearest centroid
+  use_norm: false    # false = embed canonical description; true = embed lowercased norm
+
+  # TFIDFClusterer options
+  tfidf_max_features: 5000
+  tfidf_n_top_clusters: 200
+
+  # EmbeddingClusterer (HDBSCAN) options
+  min_cluster_size: 10
+  min_samples: 5

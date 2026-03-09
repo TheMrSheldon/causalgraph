@@ -72,23 +72,23 @@ except Exception:
 
 @lru_cache(maxsize=1)
 def _get_config() -> dict:
-    with open("config.yaml") as f:
+    with open("pipeline.yaml") as f:
         return yaml.safe_load(f)
 
 
 @lru_cache(maxsize=1)
 def _get_detector():
-    return _build(_get_config()["pipeline"]["step1_detection"], CausalityDetector)
+    return _build(_get_config()["step1_detection"], CausalityDetector)
 
 
 @lru_cache(maxsize=1)
 def _get_extractor():
-    return _build(_get_config()["pipeline"]["step2_extraction"], CausalExtractor)
+    return _build(_get_config()["step2_extraction"], CausalExtractor)
 
 
 @lru_cache(maxsize=1)
 def _get_canonizer():
-    step_cfg = copy.deepcopy(_get_config()["pipeline"]["step3_canonization"])
+    step_cfg = copy.deepcopy(_get_config()["step3_canonization"])
     # Inject GPU device for TransformerCanonizer unless already specified
     if step_cfg.get("implementation", "").endswith("TransformerCanonizer") and "device" not in step_cfg:
         step_cfg["device"] = _DEVICE
@@ -196,9 +196,6 @@ class ExtractResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 def create_app() -> FastAPI:
-    config = _get_config()
-    cors_origins = config.get("pipeline_server", {}).get("cors_origins", ["*"])
-
     app = FastAPI(
         title="Pipeline Step API",
         description="Per-step REST interface for the r/science causal pipeline.",
@@ -208,7 +205,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=cors_origins,
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["GET", "POST"],
         allow_headers=["*"],

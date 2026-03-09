@@ -2,15 +2,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install only the packages needed to run the API (no pipeline/ML deps)
-RUN pip install --no-cache-dir \
-    "fastapi>=0.111.0" \
-    "uvicorn[standard]>=0.30.0" \
-    "pyyaml>=6.0" \
-    "pydantic>=2.7.0"
+COPY api/requirements.txt ./api/requirements.txt
+RUN pip install --no-cache-dir -r api/requirements.txt
 
 COPY api/ ./api/
-COPY config.yaml .
 
 # ── Build metadata (baked in at image build time) ────────────────────────────
 ARG BUILD_VERSION=dev
@@ -19,7 +14,6 @@ ENV BUILD_VERSION=${BUILD_VERSION} \
     BUILD_DATE=${BUILD_DATE}
 
 # ── Runtime configuration ────────────────────────────────────────────────────
-# GRAPH_DB_PATH overrides the api.db_path in config.yaml.
 # Mount your graph database to this path:
 #   docker run -v /host/pipeline.db:/causalgraph/graph.db ...
 ENV GRAPH_DB_PATH=/causalgraph/graph.db

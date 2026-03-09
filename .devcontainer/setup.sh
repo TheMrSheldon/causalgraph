@@ -4,11 +4,10 @@
 set -euo pipefail
 
 echo "=== Installing Python dependencies ==="
-pip install --quiet \
-    duckdb pyarrow pyyaml "pydantic>=2" \
-    fastapi "uvicorn[standard]" httpx \
-    spacy scikit-learn numpy \
-    sentence-transformers hdbscan
+pip install --quiet -r api/requirements.txt -r pipeline/requirements.txt
+
+# Dev tools
+pip install --quiet pytest pytest-asyncio ruff
 
 # spaCy's CLI is broken on Python 3.14 (pydantic v1 incompatibility).
 # Install the model wheel directly instead.

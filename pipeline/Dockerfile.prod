@@ -10,40 +10,15 @@ RUN apt-get update && \
 WORKDIR /app
 
 # ── Python dependencies ───────────────────────────────────────────────────────
-# Core data / pipeline
-RUN pip install --no-cache-dir --ignore-requires-python \
-    "duckdb>=1.1.0" \
-    "pyarrow>=18.0.0" \
-    "pyyaml>=6.0" \
-    "pydantic>=2.7.0"
+COPY pipeline/requirements.txt ./pipeline/requirements.txt
+RUN pip install --no-cache-dir --ignore-requires-python -r pipeline/requirements.txt
 
-# Step 2: spaCy extractor
-RUN pip install --no-cache-dir --ignore-requires-python "spacy>=3.7.0" && \
-    python -m spacy download en_core_web_sm
-
-# Step 3 / 4: clustering & embeddings
-RUN pip install --no-cache-dir --ignore-requires-python \
-    "sentence-transformers>=3.0.0" \
-    "hdbscan>=0.8.38" \
-    "scikit-learn>=1.5.0" \
-    "numpy>=1.26.0"
-
-# Step 3: transformer canonizer (Qwen/Mistral etc.)
-RUN pip install --no-cache-dir --ignore-requires-python "transformers>=4.40.0"
-
-# API server + optional LLM canonizer clients
-RUN pip install --no-cache-dir --ignore-requires-python \
-    "fastapi>=0.111.0" \
-    "uvicorn[standard]>=0.30.0" \
-    "httpx>=0.27.0" \
-    "openai>=1.30.0" \
-    "anthropic>=0.28.0"
+# spaCy model (downloaded separately — not in requirements.txt)
+RUN python -m spacy download en_core_web_sm
 
 # ── Application source ────────────────────────────────────────────────────────
 COPY pipeline/ ./pipeline/
-COPY api/      ./api/
-COPY scripts/  ./scripts/
-COPY config.yaml .
+COPY pipeline.yaml .
 
 # ── Build metadata ────────────────────────────────────────────────────────────
 ARG BUILD_VERSION=dev
@@ -52,8 +27,8 @@ ENV BUILD_VERSION=${BUILD_VERSION} \
     BUILD_DATE=${BUILD_DATE}
 
 # ── Runtime configuration ─────────────────────────────────────────────────────
-# Pipeline server: mount routes at /pipeline/* so lighttpd can proxy without
-# path rewriting.  Leave empty ("") to keep the flat-root dev layout.
+# Pipeline server: mount routes at /pipeline/* so the frontend proxy path matches.
+# Leave empty ("") to serve from the root.
 ENV PIPELINE_ROOT=/pipeline
 
 # Data directory — mount your parquet + DB here:
@@ -64,5 +39,5 @@ EXPOSE 8001
 
 # Default: run the pipeline analysis server (text-analyzer backend).
 # Override CMD to run the full pipeline:
-#   docker run ... python scripts/run_pipeline.py --config /causalgraph/config.yaml
+#   docker run ... python -m pipeline.runner --config /causalgraph/pipeline.yaml
 CMD ["uvicorn", "pipeline.server:app", "--host", "0.0.0.0", "--port", "8001"]

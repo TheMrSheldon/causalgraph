@@ -1,8 +1,8 @@
 """
 Pipeline orchestrator: runs all four steps end-to-end.
 
-Usage (via CLI):
-    python scripts/run_pipeline.py [--config config.yaml] [--step 1|2|3|4]
+Usage:
+    python -m pipeline.runner [--config config.yaml] [--step 1|2|3|4]
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from pipeline.protocols import (
 )
 
 
-def _load_config(path: str = "config.yaml") -> dict:
+def _load_config(path: str = "pipeline.yaml") -> dict:
     with open(path) as f:
         return yaml.safe_load(f)
 
@@ -247,32 +247,49 @@ def run_step4(
     return len(clusters)
 
 
-def run_all(config_path: str = "config.yaml", step: int | None = None) -> None:
+def run_all(config_path: str = "pipeline.yaml", step: int | None = None) -> None:
     config = _load_config(config_path)
-    pipeline_cfg = config["pipeline"]
-    db_path = pipeline_cfg["db_path"]
-    batch_size = pipeline_cfg.get("batch_size", 5000)
-    min_score = pipeline_cfg.get("min_score", 1)
+    db_path = config["db_path"]
+    batch_size = config.get("batch_size", 5000)
+    min_score = config.get("min_score", 1)
 
     db = Database(db_path)
     db.initialize_schema()
 
-    reader = ParquetReader(pipeline_cfg["parquet_path"], min_score=min_score)
+    reader = ParquetReader(config["parquet_path"], min_score=min_score)
 
     if step is None or step == 1:
-        detector = _build(pipeline_cfg["step1_detection"], CausalityDetector)
+        detector = _build(config["step1_detection"], CausalityDetector)
         run_step1(detector, reader, db, batch_size)
 
     if step is None or step == 2:
-        extractor = _build(pipeline_cfg["step2_extraction"], CausalExtractor)
+        extractor = _build(config["step2_extraction"], CausalExtractor)
         run_step2(extractor, db)
 
     if step is None or step == 3:
-        canonizer = _build(pipeline_cfg["step3_canonization"], EventCanonizer)
+        canonizer = _build(config["step3_canonization"], EventCanonizer)
         run_step3(canonizer, db)
 
     if step is None or step == 4:
-        inferrer = _build(pipeline_cfg["step4_hierarchy"], HierarchyInferrer)
+        inferrer = _build(config["step4_hierarchy"], HierarchyInferrer)
         run_step4(inferrer, db)
 
     print("[Pipeline] All steps complete.")
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="r/science causal relationship extraction pipeline"
+    )
+    parser.add_argument("--config", default="pipeline.yaml", help="Path to pipeline.yaml")
+    parser.add_argument(
+        "--step",
+        type=int,
+        choices=[1, 2, 3, 4],
+        default=None,
+        help="Run only a specific step (1=detect, 2=extract, 3=canonize, 4=cluster). Omit to run all.",
+    )
+    args = parser.parse_args()
+    run_all(config_path=args.config, step=args.step)

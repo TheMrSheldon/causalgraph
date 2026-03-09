@@ -51,7 +51,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ${{ github.workspace }}/frontend
-          file: Dockerfile.prod
+          file: frontend/Dockerfile.prod
           push: true
           tags: ${{ steps.meta.outputs.registry }}/causalgraph-frontend:${{ steps.meta.outputs.tag }}
           build-args: |
@@ -65,7 +65,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ${{ github.workspace }}
-          file: Dockerfile.backend
+          file: api/Dockerfile.prod
           push: true
           tags: ${{ steps.meta.outputs.registry }}/causalgraph-backend:${{ steps.meta.outputs.tag }}
           build-args: |
@@ -79,7 +79,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ${{ github.workspace }}
-          file: Dockerfile.pipeline
+          file: pipeline/Dockerfile.prod
           push: true
           tags: ${{ steps.meta.outputs.registry }}/causalgraph-pipeline:${{ steps.meta.outputs.tag }}
           build-args: |
