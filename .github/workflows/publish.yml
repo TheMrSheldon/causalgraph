@@ -53,7 +53,7 @@ jobs:
           context: ${{ github.workspace }}
           file: Dockerfile.frontend
           push: true
-          tags: ${{ steps.meta.outputs.registry }}/rscience-frontend:${{ steps.meta.outputs.tag }}
+          tags: ${{ steps.meta.outputs.registry }}/causalgraph-frontend:${{ steps.meta.outputs.tag }}
           build-args: |
             BUILD_VERSION=${{ steps.meta.outputs.version }}
             BUILD_DATE=${{ steps.meta.outputs.build_date }}
@@ -67,7 +67,7 @@ jobs:
           context: ${{ github.workspace }}
           file: Dockerfile.backend
           push: true
-          tags: ${{ steps.meta.outputs.registry }}/rscience-backend:${{ steps.meta.outputs.tag }}
+          tags: ${{ steps.meta.outputs.registry }}/causalgraph-backend:${{ steps.meta.outputs.tag }}
           build-args: |
             BUILD_VERSION=${{ steps.meta.outputs.version }}
             BUILD_DATE=${{ steps.meta.outputs.build_date }}
@@ -81,7 +81,7 @@ jobs:
           context: ${{ github.workspace }}
           file: Dockerfile.pipeline
           push: true
-          tags: ${{ steps.meta.outputs.registry }}/rscience-pipeline:${{ steps.meta.outputs.tag }}
+          tags: ${{ steps.meta.outputs.registry }}/causalgraph-pipeline:${{ steps.meta.outputs.tag }}
           build-args: |
             BUILD_VERSION=${{ steps.meta.outputs.version }}
             BUILD_DATE=${{ steps.meta.outputs.build_date }}
