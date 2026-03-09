@@ -234,6 +234,38 @@ class GraphDatabase:
             rows = [dict(r) for r in conn.execute(sql, params + [limit, offset]).fetchall()]
         return rows, total
 
+    def get_all_relations_for_posts(self, post_ids: list[str]) -> dict[str, list[dict]]:
+        """Return all causal relations for each post, keyed by post_id.
+
+        Each relation includes cause/effect canonical descriptions and the
+        leaf-level cluster IDs from cluster_members (or None when unclustered).
+        """
+        if not post_ids:
+            return {}
+        ph = ",".join("?" * len(post_ids))
+        sql = f"""
+            SELECT
+                cr.post_id,
+                cr.cause_text, cr.effect_text,
+                cr.cause_canonical, cr.effect_canonical,
+                cr.is_countercausal,
+                cm_cause.cluster_id  AS cause_cluster_id,
+                cm_effect.cluster_id AS effect_cluster_id
+            FROM causal_relations cr
+            LEFT JOIN cluster_members cm_cause
+                ON cm_cause.relation_id = cr.id AND cm_cause.role = 'cause'
+            LEFT JOIN cluster_members cm_effect
+                ON cm_effect.relation_id = cr.id AND cm_effect.role = 'effect'
+            WHERE cr.post_id IN ({ph})
+            ORDER BY cr.post_id, cr.id
+        """
+        result: dict[str, list[dict]] = {}
+        with self._connect() as conn:
+            for row in conn.execute(sql, post_ids).fetchall():
+                d = dict(row)
+                result.setdefault(d["post_id"], []).append(d)
+        return result
+
     def get_post_by_id(self, post_id: str) -> dict | None:
         sql = """
             SELECT p.id, p.title, p.score, p.num_comments, p.created_utc, p.permalink,

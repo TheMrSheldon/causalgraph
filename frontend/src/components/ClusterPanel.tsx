@@ -1,4 +1,4 @@
-import { useCluster } from '../hooks/useGraph'
+import { useCluster, useClusterPosts } from '../hooks/useGraph'
 import { PostItem } from './PostItem'
 
 interface ClusterPanelProps {
@@ -17,8 +17,9 @@ const LEVEL_META = [
   { label: 'Top',  cls: 'wlabel'                 },
 ] as const
 
-export function ClusterPanel({ clusterId, clusterLabels, onClusterClick, isExpanded, onCollapseRequest, showHighlightSpans = false, highlightedPostId }: ClusterPanelProps) {
+export function ClusterPanel({ clusterId, clusterLabels, onClusterClick, isExpanded, onCollapseRequest, highlightedPostId }: ClusterPanelProps) {
   const { data, isLoading } = useCluster(clusterId)
+  const { data: postsData, isLoading: postsLoading } = useClusterPosts(clusterId)
 
   if (clusterId === null) {
     return (
@@ -93,10 +94,20 @@ export function ClusterPanel({ clusterId, clusterLabels, onClusterClick, isExpan
         </>
       )}
 
-      {data.posts.length > 0 && (
+      {postsLoading && <div className="loading">Loading posts…</div>}
+
+      {postsData && (
         <>
-          <div className="cluster-section-label">Sample posts</div>
-          {data.posts.map((p) => <PostItem key={p.id} post={p} showSpans={showHighlightSpans} showDate highlighted={p.id === highlightedPostId} />)}
+          <div className="cluster-section-label">{postsData.total.toLocaleString()} posts</div>
+          {postsData.posts.map((p) => (
+            <PostItem
+              key={p.id}
+              post={p}
+              showDate
+              highlighted={p.id === highlightedPostId}
+              onClusterClick={onClusterClick}
+            />
+          ))}
         </>
       )}
     </div>

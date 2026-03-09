@@ -49,10 +49,18 @@ export interface PaginatedPosts {
   offset: number;
 }
 
-export interface EdgePostSummary extends PostSummary {
-  cause_text: string | null;
-  effect_text: string | null;
+export interface RelationSpan {
+  cause_text: string;
+  effect_text: string;
+  cause_canonical: string | null;
+  effect_canonical: string | null;
+  cause_cluster_id: number | null;
+  effect_cluster_id: number | null;
   is_countercausal: boolean;
+}
+
+export interface EdgePostSummary extends PostSummary {
+  relations: RelationSpan[];
 }
 
 export interface PaginatedEdgePosts {

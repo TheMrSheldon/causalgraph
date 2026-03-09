@@ -1,41 +1,123 @@
 import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { buildShareUrl } from '../hooks/useUrlSync'
-import type { EdgePostSummary } from '../types'
+import type { EdgePostSummary, RelationSpan } from '../types'
 
-function highlightSpans(
-  title: string,
-  causeText: string | null | undefined,
-  effectText: string | null | undefined,
-): ReactNode {
-  type Span = { start: number; end: number; type: 'cause' | 'effect' }
-  const spans: Span[] = []
+// ---------------------------------------------------------------------------
+// Event span rendering (wavy underlines with tooltip + click-to-navigate)
+// ---------------------------------------------------------------------------
 
-  const findSpan = (text: string | null | undefined, type: 'cause' | 'effect') => {
-    if (!text) return
-    const idx = title.toLowerCase().indexOf(text.toLowerCase())
-    if (idx !== -1) spans.push({ start: idx, end: idx + text.length, type })
+type EventInfo = {
+  start: number
+  end: number
+  canonical: string
+  clusterId: number | null
+  role: 'cause' | 'effect'
+}
+
+/** Find the first occurrence of `needle` in `haystack` (case-insensitive). */
+function findPos(haystack: string, needle: string): number {
+  return haystack.toLowerCase().indexOf(needle.toLowerCase())
+}
+
+/**
+ * Collect all event spans from all relations, deduplicated by (start, end, role).
+ * Multiple relations can map to the same text span in the title.
+ */
+function collectEvents(title: string, relations: RelationSpan[]): EventInfo[] {
+  const seen = new Set<string>()
+  const events: EventInfo[] = []
+  for (const rel of relations) {
+    const addSpan = (text: string, role: 'cause' | 'effect', canonical: string | null, clusterId: number | null) => {
+      const idx = findPos(title, text)
+      if (idx === -1) return
+      const key = `${idx}:${idx + text.length}:${role}`
+      if (seen.has(key)) return
+      seen.add(key)
+      events.push({ start: idx, end: idx + text.length, canonical: canonical || text, clusterId, role })
+    }
+    addSpan(rel.cause_text, 'cause', rel.cause_canonical, rel.cause_cluster_id)
+    addSpan(rel.effect_text, 'effect', rel.effect_canonical, rel.effect_cluster_id)
   }
+  return events
+}
 
-  findSpan(causeText, 'cause')
-  findSpan(effectText, 'effect')
-  if (spans.length === 0) return title
+/** Single styled span segment covering [start, end) in the title. */
+function EventSpan({
+  text,
+  events,
+  onClusterClick,
+}: {
+  text: string
+  events: EventInfo[]  // all events that contain this segment, longest-first
+  onClusterClick?: (clusterId: number) => void
+}) {
+  const [tipVisible, setTipVisible] = useState(false)
+  // Innermost (shortest) event provides the visual style
+  const inner = events[events.length - 1]
+  const clickable = inner.clusterId != null && onClusterClick != null
 
-  spans.sort((a, b) => a.start - b.start)
+  const cls = [
+    'event-span',
+    `event-span--${inner.role}`,
+    clickable ? 'event-span--clickable' : '',
+  ].filter(Boolean).join(' ')
+
+  // Tooltip: one line per distinct canonical description
+  const tipLines = [...new Set(events.map(e => e.canonical))].join('\n')
+
+  return (
+    <span
+      className={cls}
+      onMouseEnter={() => setTipVisible(true)}
+      onMouseLeave={() => setTipVisible(false)}
+      onClick={clickable ? (e) => { e.stopPropagation(); onClusterClick!(inner.clusterId!) } : undefined}
+    >
+      {text}
+      {tipVisible && (
+        <span className="event-span-tooltip">{tipLines}</span>
+      )}
+    </span>
+  )
+}
+
+/**
+ * Render title text with event spans as wavy-underlined, hoverable, clickable
+ * elements. Handles nested and overlapping spans via boundary segmentation.
+ */
+function renderEventSpans(
+  title: string,
+  relations: RelationSpan[],
+  onClusterClick?: (clusterId: number) => void,
+): ReactNode {
+  const events = collectEvents(title, relations)
+  if (!events.length) return title
+
+  // Collect all boundary points across all spans
+  const pts = Array.from(
+    new Set([0, title.length, ...events.flatMap(e => [e.start, e.end])])
+  ).sort((a, b) => a - b)
 
   const parts: ReactNode[] = []
-  let pos = 0
-  for (const span of spans) {
-    if (span.start < pos) continue
-    if (span.start > pos) parts.push(title.slice(pos, span.start))
-    parts.push(
-      <mark key={span.start} className={`span-${span.type}`}>
-        {title.slice(span.start, span.end)}
-      </mark>
-    )
-    pos = span.end
+  for (let i = 0; i < pts.length - 1; i++) {
+    const s = pts[i], e = pts[i + 1]
+    // Events that fully contain this segment
+    const active = events.filter(ev => ev.start <= s && ev.end >= e)
+    if (!active.length) {
+      parts.push(title.slice(s, e))
+    } else {
+      // Sort outer→inner (longest first); innermost provides visual role
+      active.sort((a, b) => (b.end - b.start) - (a.end - a.start))
+      parts.push(
+        <EventSpan
+          key={s}
+          text={title.slice(s, e)}
+          events={active}
+          onClusterClick={onClusterClick}
+        />
+      )
+    }
   }
-  if (pos < title.length) parts.push(title.slice(pos))
   return <>{parts}</>
 }
 
@@ -136,15 +218,16 @@ function SharePopup({
 
 export function PostItem({
   post,
-  showSpans = false,
   showDate = false,
   highlighted = false,
+  onClusterClick,
 }: {
   post: EdgePostSummary
-  showSpans?: boolean
   showDate?: boolean
   /** When true: scroll into view and flash-highlight on mount */
   highlighted?: boolean
+  /** Navigate to a cluster when an event span is clicked */
+  onClusterClick?: (clusterId: number) => void
 }) {
   const href = post.permalink
     ? `https://reddit.com${post.permalink}`
@@ -154,6 +237,9 @@ export function PostItem({
   const itemRef    = useRef<HTMLDivElement>(null)
   const shareBtnRef = useRef<HTMLButtonElement>(null)
   const [shareRect, setShareRect] = useState<DOMRect | null>(null)
+
+  const relations = post.relations ?? []
+  const isCountercausal = relations.some(r => r.is_countercausal)
 
   // Scroll + flash on highlighted mount
   useEffect(() => {
@@ -178,11 +264,9 @@ export function PostItem({
       className={`post-item${highlighted ? ' post-item--highlighted' : ''}`}
     >
       <p className="post-title">
-        {showSpans
-          ? highlightSpans(post.title, post.cause_text, post.effect_text)
-          : post.title}
+        {renderEventSpans(post.title, relations, onClusterClick)}
         {' '}[<a className="res-link" href={href} target="_blank" rel="noopener noreferrer">reddit</a>]
-        {post.is_countercausal && <span className="countercausal-badge">refuted</span>}
+        {isCountercausal && <span className="countercausal-badge">refuted</span>}
       </p>
       <div className="post-meta-row">
         <span className="post-meta">

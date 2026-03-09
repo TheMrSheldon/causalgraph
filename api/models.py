@@ -61,10 +61,18 @@ class PaginatedPosts(BaseModel):
     offset: int
 
 
-class EdgePostSummary(PostSummary):
-    cause_text: str | None = None
-    effect_text: str | None = None
+class RelationSpan(BaseModel):
+    cause_text: str
+    effect_text: str
+    cause_canonical: str | None = None
+    effect_canonical: str | None = None
+    cause_cluster_id: int | None = None
+    effect_cluster_id: int | None = None
     is_countercausal: bool = False
+
+
+class EdgePostSummary(PostSummary):
+    relations: list[RelationSpan] = []
 
 
 class PaginatedEdgePosts(BaseModel):

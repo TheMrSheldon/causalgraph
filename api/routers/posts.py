@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.dependencies import get_db
-from api.models import EdgePostSummary, PaginatedEdgePosts, PaginatedPosts, PostDetail, PostSummary
+from api.models import EdgePostSummary, PaginatedEdgePosts, PaginatedPosts, PostDetail, PostSummary, RelationSpan
 from api.db import GraphDatabase
 
 router = APIRouter(prefix="/api/posts", tags=["posts"])
@@ -25,6 +25,8 @@ def get_posts_for_edge(
     posts_raw, total = db.get_posts_for_edge(
         source_cluster_id, target_cluster_id, limit=limit, offset=offset
     )
+    post_ids = [p["id"] for p in posts_raw]
+    all_relations = db.get_all_relations_for_posts(post_ids)
     return PaginatedEdgePosts(
         posts=[
             EdgePostSummary(
@@ -34,9 +36,18 @@ def get_posts_for_edge(
                 num_comments=p["num_comments"],
                 created_utc=p["created_utc"],
                 permalink=p["permalink"],
-                cause_text=p.get("cause_text"),
-                effect_text=p.get("effect_text"),
-                is_countercausal=bool(p.get("is_countercausal", 0)),
+                relations=[
+                    RelationSpan(
+                        cause_text=r["cause_text"],
+                        effect_text=r["effect_text"],
+                        cause_canonical=r.get("cause_canonical"),
+                        effect_canonical=r.get("effect_canonical"),
+                        cause_cluster_id=r.get("cause_cluster_id"),
+                        effect_cluster_id=r.get("effect_cluster_id"),
+                        is_countercausal=bool(r.get("is_countercausal", 0)),
+                    )
+                    for r in all_relations.get(p["id"], [])
+                ],
             )
             for p in posts_raw
         ],

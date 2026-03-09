@@ -10,8 +10,10 @@ from api.models import (
     EdgePostSummary,
     GraphEdge,
     GraphResponse,
+    PaginatedEdgePosts,
     PaginatedPosts,
     PostSummary,
+    RelationSpan,
 )
 from api.db import GraphDatabase
 
@@ -39,6 +41,9 @@ def get_cluster(cluster_id: int, db: GraphDatabase = Depends(get_db)) -> Cluster
     top_events = db.get_top_events_for_cluster(cluster_id, n=20)
     posts_raw, _ = db.get_posts_for_cluster(cluster_id, limit=10, sort="score")
 
+    post_ids = [p["id"] for p in posts_raw]
+    all_relations = db.get_all_relations_for_posts(post_ids)
+
     return ClusterDetail(
         cluster=_to_node(raw),
         children=[_to_node(c) for c in children_raw],
@@ -51,9 +56,18 @@ def get_cluster(cluster_id: int, db: GraphDatabase = Depends(get_db)) -> Cluster
                 num_comments=p["num_comments"],
                 created_utc=p["created_utc"],
                 permalink=p["permalink"],
-                cause_text=p.get("cause_text"),
-                effect_text=p.get("effect_text"),
-                is_countercausal=bool(p.get("is_countercausal", False)),
+                relations=[
+                    RelationSpan(
+                        cause_text=r["cause_text"],
+                        effect_text=r["effect_text"],
+                        cause_canonical=r.get("cause_canonical"),
+                        effect_canonical=r.get("effect_canonical"),
+                        cause_cluster_id=r.get("cause_cluster_id"),
+                        effect_cluster_id=r.get("effect_cluster_id"),
+                        is_countercausal=bool(r.get("is_countercausal", False)),
+                    )
+                    for r in all_relations.get(p["id"], [])
+                ],
             )
             for p in posts_raw
         ],
@@ -102,28 +116,42 @@ def expand_cluster(
     )
 
 
-@router.get("/{cluster_id}/posts", response_model=PaginatedPosts)
+@router.get("/{cluster_id}/posts", response_model=PaginatedEdgePosts)
 def get_cluster_posts(
     cluster_id: int,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     sort: str = Query(default="score", pattern="^(score|date|comments)$"),
     db: GraphDatabase = Depends(get_db),
-) -> PaginatedPosts:
+) -> PaginatedEdgePosts:
     """Return paginated posts associated with this cluster."""
     if db.get_cluster_by_id(cluster_id) is None:
         raise HTTPException(status_code=404, detail=f"Cluster {cluster_id} not found")
 
     posts_raw, total = db.get_posts_for_cluster(cluster_id, limit=limit, offset=offset, sort=sort)
-    return PaginatedPosts(
+    post_ids = [p["id"] for p in posts_raw]
+    all_relations = db.get_all_relations_for_posts(post_ids)
+    return PaginatedEdgePosts(
         posts=[
-            PostSummary(
+            EdgePostSummary(
                 id=p["id"],
                 title=p["title"],
                 score=p["score"],
                 num_comments=p["num_comments"],
                 created_utc=p["created_utc"],
                 permalink=p["permalink"],
+                relations=[
+                    RelationSpan(
+                        cause_text=r["cause_text"],
+                        effect_text=r["effect_text"],
+                        cause_canonical=r.get("cause_canonical"),
+                        effect_canonical=r.get("effect_canonical"),
+                        cause_cluster_id=r.get("cause_cluster_id"),
+                        effect_cluster_id=r.get("effect_cluster_id"),
+                        is_countercausal=bool(r.get("is_countercausal", False)),
+                    )
+                    for r in all_relations.get(p["id"], [])
+                ],
             )
             for p in posts_raw
         ],

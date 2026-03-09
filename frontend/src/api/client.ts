@@ -5,7 +5,6 @@ import type {
   GraphData,
   LevelCounts,
   PaginatedEdgePosts,
-  PaginatedPosts,
   PathsResponse,
   PostDetail,
 } from '../types'
@@ -128,8 +127,8 @@ export const api = {
     limit = 50,
     offset = 0,
     sort = 'score'
-  ): Promise<PaginatedPosts> => {
-    const { data } = await http.get<PaginatedPosts>(`/clusters/${id}/posts`, {
+  ): Promise<PaginatedEdgePosts> => {
+    const { data } = await http.get<PaginatedEdgePosts>(`/clusters/${id}/posts`, {
       params: { limit, offset, sort },
     })
     return data

@@ -162,7 +162,7 @@ export function TextAnalyzerScreen() {
         <span className="analyzer-pane-title">Analysis</span>
         {result && (
           <span className="analyzer-pane-meta">
-            {result.relations.length} relation{result.relations.length !== 1 ? 's' : ''} found
+            {result.relations.length} relationship{result.relations.length !== 1 ? 's' : ''} found
           </span>
         )}
       </div>
@@ -192,7 +192,7 @@ export function TextAnalyzerScreen() {
             {result.relations.length > 0 ? (
               <>
                 <div className="cluster-section-label" style={{ marginTop: 16 }}>
-                  Extracted relations
+                  Extracted relationships
                   <span className="analyzer-hover-hint">hover for certainty</span>
                 </div>
                 {result.relations.map((r, i) => (
@@ -200,7 +200,7 @@ export function TextAnalyzerScreen() {
                 ))}
               </>
             ) : (
-              <p className="hint">No causal relations detected. Try sentences with words like "causes", "leads to", "increases", "reduces".</p>
+              <p className="hint">No causal relationships detected. Try sentences with words like "causes", "leads to", "increases", "reduces".</p>
             )}
           </>
         )}

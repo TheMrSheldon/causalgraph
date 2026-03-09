@@ -96,7 +96,7 @@ export function StatsModal({ open, onClose, nodes, edges, clusterLabels }: Stats
             <StatRow label="Avg posts / edge" value={avgPosts} />
           </StatSection>
 
-          <StatSection title="Causal Relations">
+          <StatSection title="Causal Relationships">
             <StatRow label="Total" value={totalRelations} />
             <StatRow label="→  Causal" value={totalCausal}
               sub={totalRelations > 0 ? `(${(100 - Number(ccRate)).toFixed(1)}%)` : ''} />

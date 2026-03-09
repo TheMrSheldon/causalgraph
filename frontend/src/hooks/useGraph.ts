@@ -25,3 +25,12 @@ export function useCluster(id: number | null) {
     staleTime: 5 * 60 * 1000,
   })
 }
+
+export function useClusterPosts(id: number | null, limit = 50) {
+  return useQuery({
+    queryKey: ['cluster-posts', id, limit],
+    queryFn: () => api.getClusterPosts(id!, limit),
+    enabled: id !== null,
+    staleTime: 5 * 60 * 1000,
+  })
+}

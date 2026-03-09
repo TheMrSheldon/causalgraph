@@ -322,7 +322,6 @@ export default function App() {
                   sourceLabel={clusterLabels.get(selectedEdge.source_cluster_id)}
                   targetLabel={clusterLabels.get(selectedEdge.target_cluster_id)}
                   onClusterClick={handleClusterClick}
-                  showHighlightSpans={settings.showHighlightSpans}
                   highlightedPostId={highlightedPostId}
                 />
               : <ClusterPanel
@@ -331,7 +330,6 @@ export default function App() {
                   onClusterClick={handleClusterClick}
                   isExpanded={isExpanded}
                   onCollapseRequest={collapseCluster}
-                  showHighlightSpans={settings.showHighlightSpans}
                   highlightedPostId={highlightedPostId}
                 />
             }
