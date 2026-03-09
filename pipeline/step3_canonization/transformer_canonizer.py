@@ -45,26 +45,42 @@ from pipeline.protocols import CausalRelation, EventCanonizer
 # Prompt helpers
 # ---------------------------------------------------------------------------
 
-_SYSTEM = (
-    "You are a scientific text editor. "
-    "Rewrite the highlighted event span into a concise, self-contained noun "
-    "phrase (2–8 words) that fully describes the event. "
-    "Use the surrounding sentence for context when it adds precision. "
-    "Return only the rewritten phrase — no explanation, no punctuation at the end."
-)
+_SYSTEM = """You convert a text span into a short, self-contained description of the event or concept it refers to.
+
+You are given:
+- TEXT: a passage
+- SPAN: a substring from that passage
+
+Task:
+Write a short canonical phrase that describes the event or concept in the SPAN so that it is understandable without the original text.
+
+Rules:
+- Use surrounding context from TEXT if necessary.
+- Keep the result concise (typically 2–8 words).
+- Preserve the meaning of the SPAN.
+- Do not repeat unnecessary context.
+- Output only the canonicalized phrase.
+"""
+
+_USER_PROMPT = """
+TEXT:
+{text}
+
+SPAN:
+{span}
+
+CANONIZED:
+"""
+
+_EXAMPLES: list[tuple[str, str, str]] = [
+    ("Smoking significantly increases the risk of heart disease.", "increases the risk of heart disease", "Increase in risk of heart disease"),
+    ("Study finds that eating 2 mushrooms per day can decrease the risk of most cancers by almost half.", "the risk of most cancers by almost half", "Decrease of the risk of most cancers by almost half"),
+    ("Heavy rainfall flooded several villages in the region.", "flooded several villages", "Flooding of several villages"),
+]
 
 
 def _make_prompt(sentence: str, span: str) -> str:
-    if sentence:
-        return (
-            f"Sentence: {sentence}\n"
-            f"Event span: «{span}»\n"
-            f"Self-contained description:"
-        )
-    return (
-        f"Event span: «{span}»\n"
-        f"Self-contained description:"
-    )
+    return _USER_PROMPT.format_map({"text": sentence, "span": span})
 
 
 def _clean(output: str, fallback: str) -> str:
@@ -215,9 +231,20 @@ class TransformerCanonizer:
             _register(r.effect_text, r.post_title)
 
         # 2. Build chat messages for each unique key
+        examples = [
+            msg
+            for text, span, canon in _EXAMPLES
+            for msg in (
+                {"role": "user", "content": _make_prompt(text, span)},
+                {"role": "assistant", "content": canon},
+            )
+        ]
         message_lists = [
             [
                 {"role": "system", "content": _SYSTEM},
+                # Examples
+                *examples,
+                # Current query
                 {"role": "user", "content": _make_prompt(key[1], key_to_orig[key])},
             ]
             for key in model_keys

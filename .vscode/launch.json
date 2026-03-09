@@ -42,10 +42,10 @@
       "console": "integratedTerminal"
     },
     // -----------------------------------------------------------------------
-    // FastAPI server
+    // Python Servers
     // -----------------------------------------------------------------------
     {
-      "name": "API: FastAPI Server (uvicorn)",
+      "name": "Backend",
       "type": "debugpy",
       "request": "launch",
       "module": "uvicorn",
@@ -54,6 +54,23 @@
         "--reload",
         "--host", "0.0.0.0",
         "--port", "8000"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    },
+    {
+      "name": "Pipeline Server",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "pipeline.server:app",
+        "--reload",
+        "--host", "0.0.0.0",
+        "--port", "8001"
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
@@ -97,7 +114,7 @@
   "compounds": [
     {
       "name": "Full Stack: API + (manual) Frontend",
-      "configurations": ["API: FastAPI Server (uvicorn)"],
+      "configurations": ["Backend", "Pipeline Server"],
       "presentation": {
         "hidden": false,
         "group": "Full Stack",

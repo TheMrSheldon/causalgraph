@@ -32,7 +32,7 @@ pipeline:
     model_name: "Qwen/Qwen2.5-1.5B-Instruct"
     batch_size: 8                      # Prompts per batch; increase for GPU (32–64)
     max_new_tokens: 24                 # Max output tokens; event spans are short
-    device: -1                         # -1 = CPU; 0 = first CUDA GPU
+    device: 0                          # -1 = CPU; 0 = first CUDA GPU
 
     # LLM options (only used when implementation = llm_*)
     llm_model: "claude-haiku-4-5-20251001"

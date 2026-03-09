@@ -3,8 +3,6 @@
 # Runs automatically after the container is created.
 set -euo pipefail
 
-cd /workspaces/conf-rscience-corpus
-
 echo "=== Installing Python dependencies ==="
 pip install --quiet \
     duckdb pyarrow pyyaml "pydantic>=2" \
@@ -25,12 +23,3 @@ else
     echo "  Node.js not found — skipping frontend install."
     echo "  Install Node.js 18+ and run: cd frontend && npm install"
 fi
-
-echo ""
-echo "=== Setup complete ==="
-echo ""
-echo "Next steps:"
-echo "  1. Run the pipeline:   python scripts/run_pipeline.py"
-echo "  2. Start the API:      uvicorn api.main:app --reload --port 8000"
-echo "  3. Start the frontend: cd frontend && npm run dev"
-echo "  4. Or use VS Code Run & Debug (F5) to launch any of the above."
