@@ -420,7 +420,7 @@ export function CausalGraph({
     })
     const focusedEles = cy.nodes().filter((n) => visibleIds.has(n.id()))
     if (focusedEles.length > 0) {
-      cy.animate({ fit: { eles: focusedEles, padding: 80 } as cytoscape.Fit, duration: animate ? ANIMATION_DURATION[settingsRef.current.animationSpeed] : 0 })
+      cy.animate({ fit: { eles: focusedEles, padding: 80 }, duration: animate ? ANIMATION_DURATION[settingsRef.current.animationSpeed] : 0 })
     }
   }, [])
 
@@ -428,7 +428,7 @@ export function CausalGraph({
     const cy = cyRef.current
     if (!cy) return
     cy.elements().removeClass('focus-dimmed')
-    cy.animate({ fit: { eles: cy.elements(), padding: 60 } as cytoscape.Fit, duration: animate ? ANIMATION_DURATION[settingsRef.current.animationSpeed] : 0 })
+    cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: animate ? ANIMATION_DURATION[settingsRef.current.animationSpeed] : 0 })
   }, [])
 
   // Pop one focus level; collapse the node if it was auto-expanded by focus entry
@@ -489,7 +489,7 @@ export function CausalGraph({
       userZoomingEnabled: true,
       userPanningEnabled: true,
       boxSelectionEnabled: false,
-      zoomingFactor: 0.05,   // each scroll step changes zoom by 5% (near-linear feel)
+      wheelSensitivity: 0.2,
       minZoom: 0.1,
       maxZoom: 5,
     })
