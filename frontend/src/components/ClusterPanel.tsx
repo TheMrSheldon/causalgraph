@@ -8,6 +8,7 @@ interface ClusterPanelProps {
   isExpanded?: (id: number) => boolean
   onCollapseRequest?: (id: number) => void
   showHighlightSpans?: boolean
+  highlightedPostId?: string | null
 }
 
 const LEVEL_META = [
@@ -16,7 +17,7 @@ const LEVEL_META = [
   { label: 'Top',  cls: 'wlabel'                 },
 ] as const
 
-export function ClusterPanel({ clusterId, clusterLabels, onClusterClick, isExpanded, onCollapseRequest, showHighlightSpans = false }: ClusterPanelProps) {
+export function ClusterPanel({ clusterId, clusterLabels, onClusterClick, isExpanded, onCollapseRequest, showHighlightSpans = false, highlightedPostId }: ClusterPanelProps) {
   const { data, isLoading } = useCluster(clusterId)
 
   if (clusterId === null) {
@@ -95,7 +96,7 @@ export function ClusterPanel({ clusterId, clusterLabels, onClusterClick, isExpan
       {data.posts.length > 0 && (
         <>
           <div className="cluster-section-label">Sample posts</div>
-          {data.posts.map((p) => <PostItem key={p.id} post={p} showSpans={showHighlightSpans} showDate />)}
+          {data.posts.map((p) => <PostItem key={p.id} post={p} showSpans={showHighlightSpans} showDate highlighted={p.id === highlightedPostId} />)}
         </>
       )}
     </div>

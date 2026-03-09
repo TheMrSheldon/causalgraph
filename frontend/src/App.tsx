@@ -8,20 +8,40 @@ import { StatsModal } from './components/StatsModal'
 import { TextAnalyzerScreen } from './components/TextAnalyzerScreen'
 import { useClusterExpand } from './hooks/useClusterExpand'
 import { useGraph, useLevels } from './hooks/useGraph'
+import { readUrlState, syncUrlState } from './hooks/useUrlSync'
+import type { Screen } from './hooks/useUrlSync'
+import { getApiOverrides, setApiOverrides } from './api/client'
 import './styles/graph.css'
 import type { GraphSettings, SelectedEdge } from './types'
 
-type Screen = 'explorer' | 'pathfinder' | 'analyzer'
+// Parse URL state once at module load time so useState initialisers can use it
+const initialUrl = readUrlState()
 
 export default function App() {
-  const [activeScreen, setActiveScreen] = useState<Screen>('explorer')
+  const [activeScreen, setActiveScreen] = useState<Screen>(initialUrl.screen)
   const [minPostCount, setMinPostCount] = useState(1)
-  const [selectedCluster, setSelectedCluster] = useState<number | null>(null)
-  const [selectedEdge, setSelectedEdge] = useState<SelectedEdge | null>(null)
+  const [selectedCluster, setSelectedCluster] = useState<number | null>(initialUrl.node)
+  const [selectedEdge, setSelectedEdge] = useState<SelectedEdge | null>(
+    initialUrl.edge
+      ? { source_cluster_id: initialUrl.edge.source, target_cluster_id: initialUrl.edge.target }
+      : null
+  )
+  const [highlightedPostId, setHighlightedPostId] = useState<string | null>(initialUrl.post)
+  const [focusStackIds, setFocusStackIds] = useState<number[]>(initialUrl.focus)
   const [sidebarWidth, setSidebarWidth] = useState(340)
   const dragState = useRef<{ startX: number; startWidth: number } | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [statsOpen, setStatsOpen] = useState(false)
+
+  // Backend / pipeline override URLs (reactive so they're synced to URL)
+  const [backendUrl,  setBackendUrl]  = useState(() => {
+    // URL params win over localStorage on first load
+    const { backend, pipeline } = initialUrl
+    if (backend || pipeline) setApiOverrides(backend, pipeline)
+    return getApiOverrides().backendUrl
+  })
+  const [pipelineUrl, setPipelineUrl] = useState(() => getApiOverrides().pipelineUrl)
+
   const [settings, setSettings] = useState<GraphSettings>(() => {
     const defaults: GraphSettings = {
       clusterSizeMode: 'no',
@@ -69,6 +89,38 @@ export default function App() {
   const { data: graphData, isLoading } = useGraph(topLevel, minPostCount)
   const { expandCluster, collapseCluster, isExpanded, getExpandedData } = useClusterExpand()
 
+  // Restore expanded nodes from URL on first graph load
+  const pendingExpansionsRef = useRef<number[]>(initialUrl.expanded)
+  useEffect(() => {
+    if (!graphData || pendingExpansionsRef.current.length === 0) return
+    const contextIds = graphData.nodes.map((n) => n.id)
+    for (const id of pendingExpansionsRef.current) {
+      if (graphData.nodes.some((n) => n.id === id)) {
+        expandCluster(id, contextIds.filter((cid) => cid !== id))
+      }
+    }
+    pendingExpansionsRef.current = []
+  }, [graphData, expandCluster])
+
+  // Sync all navigable state → URL (replaceState so back/forward isn't polluted)
+  useEffect(() => {
+    syncUrlState({
+      screen:   activeScreen,
+      node:     selectedCluster,
+      edge:     selectedEdge
+        ? { source: selectedEdge.source_cluster_id, target: selectedEdge.target_cluster_id }
+        : null,
+      expanded: Array.from(expandedNodes),
+      focus:    focusStackIds,
+      post:     highlightedPostId,
+      backend:  backendUrl,
+      pipeline: pipelineUrl,
+    })
+  // expandedNodes is derived below — its identity changes on every expansion;
+  // include it by spreading the dependency list manually
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeScreen, selectedCluster, selectedEdge, focusStackIds, highlightedPostId, backendUrl, pipelineUrl])
+
   const childNodesByParent = useMemo(() => {
     const map = new Map()
     for (const nodeId of Array.from({ length: 10000 }, (_, i) => i)) {
@@ -91,6 +143,23 @@ export default function App() {
     () => new Set(Array.from({ length: 10000 }, (_, i) => i).filter(isExpanded)),
     [isExpanded]
   )
+
+  // Sync expandedNodes to URL separately (its deps aren't easy to list above)
+  useEffect(() => {
+    syncUrlState({
+      screen:   activeScreen,
+      node:     selectedCluster,
+      edge:     selectedEdge
+        ? { source: selectedEdge.source_cluster_id, target: selectedEdge.target_cluster_id }
+        : null,
+      expanded: Array.from(expandedNodes),
+      focus:    focusStackIds,
+      post:     highlightedPostId,
+      backend:  backendUrl,
+      pipeline: pipelineUrl,
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedNodes])
 
   const clusterLabels = useMemo(() => {
     const map = new Map<number, string>()
@@ -131,16 +200,19 @@ export default function App() {
   const handleNodeClick = useCallback((clusterId: number) => {
     setSelectedCluster(clusterId)
     setSelectedEdge(null)
+    setHighlightedPostId(null)
   }, [])
 
   const handleEdgeClick = useCallback((edge: SelectedEdge) => {
     setSelectedEdge(edge)
     setSelectedCluster(null)
+    setHighlightedPostId(null)
   }, [])
 
   const handleClusterClick = useCallback((clusterId: number) => {
     setSelectedCluster(clusterId)
     setSelectedEdge(null)
+    setHighlightedPostId(null)
   }, [])
 
   const isExplorer = activeScreen === 'explorer'
@@ -208,6 +280,10 @@ export default function App() {
         minPostCount={minPostCount}
         onMinPostCountChange={setMinPostCount}
         activeScreen={activeScreen}
+        onEndpointsChange={(backend, pipeline) => {
+          setBackendUrl(backend)
+          setPipelineUrl(pipeline)
+        }}
       />
 
       {isExplorer && (
@@ -226,6 +302,8 @@ export default function App() {
                 onNodeRightClick={handleNodeRightClick}
                 onNodeClick={handleNodeClick}
                 onEdgeClick={handleEdgeClick}
+                onFocusStackChange={setFocusStackIds}
+                initialFocusIds={initialUrl.focus.length > 0 ? initialUrl.focus : undefined}
               />
             )}
           </main>
@@ -245,6 +323,7 @@ export default function App() {
                   targetLabel={clusterLabels.get(selectedEdge.target_cluster_id)}
                   onClusterClick={handleClusterClick}
                   showHighlightSpans={settings.showHighlightSpans}
+                  highlightedPostId={highlightedPostId}
                 />
               : <ClusterPanel
                   clusterId={selectedCluster}
@@ -253,6 +332,7 @@ export default function App() {
                   isExpanded={isExpanded}
                   onCollapseRequest={collapseCluster}
                   showHighlightSpans={settings.showHighlightSpans}
+                  highlightedPostId={highlightedPostId}
                 />
             }
           </aside>

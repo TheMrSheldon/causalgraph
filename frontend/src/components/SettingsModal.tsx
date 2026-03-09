@@ -89,6 +89,8 @@ interface SettingsModalProps {
   minPostCount: number
   onMinPostCountChange: (count: number) => void
   activeScreen: string
+  /** Called whenever backend or pipeline URL overrides change */
+  onEndpointsChange?: (backendUrl: string, pipelineUrl: string) => void
 }
 
 function SegmentedControl<T extends string>({
@@ -165,6 +167,7 @@ const LAYOUT_OPTIONS: { value: LayoutAlgorithm; label: string }[] = [
 export function SettingsModal({
   open, settings, onSettingsChange, onClose,
   minPostCount, onMinPostCountChange, activeScreen,
+  onEndpointsChange,
 }: SettingsModalProps) {
   const isExplorer = activeScreen === 'explorer'
   const queryClient = useQueryClient()
@@ -191,6 +194,7 @@ export function SettingsModal({
 
     // Apply to axios interceptors + invalidate cached queries
     setApiOverrides(newBackend, newPipeline)
+    onEndpointsChange?.(newBackend, newPipeline)
     queryClient.invalidateQueries()
 
     const urlToCheck = field === 'backend' ? newBackend : newPipeline

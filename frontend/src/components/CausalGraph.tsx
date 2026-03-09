@@ -267,6 +267,10 @@ interface CausalGraphProps {
   onNodeRightClick: (clusterId: number) => void
   onNodeClick: (clusterId: number) => void
   onEdgeClick: (edge: SelectedEdge) => void
+  /** Called whenever the internal focus stack changes (ids ordered bottom→top) */
+  onFocusStackChange?: (ids: number[]) => void
+  /** Focus stack IDs to restore from URL on first full layout */
+  initialFocusIds?: number[]
 }
 
 function toCytoscapeElements(
@@ -347,6 +351,8 @@ export function CausalGraph({
   onNodeRightClick,
   onNodeClick,
   onEdgeClick,
+  onFocusStackChange,
+  initialFocusIds,
 }: CausalGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<cytoscape.Core | null>(null)
@@ -363,6 +369,13 @@ export function CausalGraph({
   useEffect(() => { focusStackRef.current = focusStack }, [focusStack])
   // Nodes that were expanded automatically on focus entry (so we can collapse on exit)
   const focusAutoExpandedRef = useRef<Set<number>>(new Set())
+  // Track whether we have already applied initialFocusIds (applied once after first full layout)
+  const initialFocusAppliedRef = useRef(false)
+
+  // Notify parent whenever focus stack changes
+  useEffect(() => {
+    onFocusStackChange?.(focusStack.map((f) => f.id))
+  }, [focusStack, onFocusStackChange])
 
   // Keep refs current
   useEffect(() => { settingsRef.current = settings }, [settings])
@@ -624,6 +637,30 @@ export function CausalGraph({
       cy.elements().removeClass('edge-outgoing edge-incoming dimmed').remove()
       cy.add(elements)
       cy.layout(buildLayout(settingsRef.current.layoutAlgorithm, settingsRef.current.nodeSpacing, settingsRef.current.animationSpeed)).run()
+
+      // Re-apply selection after full rebuild (e.g. restoring from URL)
+      const sel = selectedNodeRef.current
+      if (sel !== null) {
+        const node = cy.$(`#cluster-${sel}`)
+        if (node.length > 0) {
+          node.select()
+          applyHighlight(node)
+          node.connectedEdges().select()
+        } else {
+          applyChildrenHighlight(sel)
+        }
+      }
+
+      // Restore focus stack from URL on first full layout
+      if (!initialFocusAppliedRef.current && initialFocusIds && initialFocusIds.length > 0) {
+        initialFocusAppliedRef.current = true
+        const entries = initialFocusIds.map((id) => ({
+          id,
+          label: (cy.$(`#cluster-${id}`).data('label') as string | undefined) ?? `Cluster ${id}`,
+          level: (cy.$(`#cluster-${id}`).data('level') as number | undefined) ?? 0,
+        }))
+        setFocusStack(entries)
+      }
       return
     }
 

@@ -623,6 +623,13 @@ html, body, #root {
   margin: 0 0 3px 0;
 }
 
+.post-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
 .post-meta {
   font-size: 11px;
   color: #888;
@@ -630,6 +637,127 @@ html, body, #root {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* ── Post highlight flash ────────────────────────────────────────────── */
+
+@keyframes post-flash {
+  0%   { background-color: rgba(30, 135, 240, 0.18); }
+  60%  { background-color: rgba(30, 135, 240, 0.10); }
+  100% { background-color: transparent; }
+}
+
+.post-item--highlighted {
+  border-radius: 3px;
+  animation: post-flash 2.4s ease-out forwards;
+}
+
+/* ── Share button ────────────────────────────────────────────────────── */
+
+.share-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 2px 4px;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  color: #bbb;
+  cursor: pointer;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+}
+
+.share-btn:hover,
+.share-btn--active {
+  color: var(--webis-primary);
+  background: rgba(30, 135, 240, 0.08);
+}
+
+/* ── Share popup ─────────────────────────────────────────────────────── */
+
+.share-popup {
+  background: #fff;
+  border: 1px solid var(--webis-border);
+  border-radius: 5px;
+  box-shadow: var(--webis-shadow-lg);
+  padding: 8px 10px;
+  min-width: 280px;
+  max-width: 360px;
+}
+
+.share-popup-toggles {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 7px;
+}
+
+.share-toggle-btn {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  border: 1px solid var(--webis-border);
+  border-radius: 3px;
+  background: #f8f8f8;
+  color: #555;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.share-toggle-btn:hover {
+  background: #eee;
+}
+
+.share-toggle-btn--active {
+  background: var(--webis-primary);
+  border-color: var(--webis-primary);
+  color: #fff;
+}
+
+.share-popup-url-row {
+  display: flex;
+  gap: 5px;
+}
+
+.share-popup-url {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 7px;
+  font-size: 11px;
+  font-family: monospace;
+  border: 1px solid var(--webis-border);
+  border-radius: 3px;
+  background: #f8f8f8;
+  color: var(--webis-text);
+  outline: none;
+}
+
+.share-popup-url:focus {
+  border-color: var(--webis-primary);
+  background: #fff;
+}
+
+.share-copy-btn {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 600;
+  border: 1px solid var(--webis-border);
+  border-radius: 3px;
+  background: #f8f8f8;
+  color: var(--webis-text);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+
+.share-copy-btn:hover {
+  background: var(--webis-primary);
+  border-color: var(--webis-primary);
+  color: #fff;
 }
 
 /* ── Edge panel (sidebar, replaces drawer) ───────────────────────────── */
