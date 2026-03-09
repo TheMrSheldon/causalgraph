@@ -23,7 +23,7 @@ FROM alpine:3.20
 RUN apk add --no-cache lighttpd gettext
 
 COPY --from=builder /app/dist /var/www/html
-COPY <<EOF /etc/lighttpd/lighttpd.conf.template
+COPY <<'EOF' /etc/lighttpd/lighttpd.conf.template
 server.modules = (
     "mod_access",
     "mod_proxy",
@@ -60,7 +60,7 @@ $HTTP["url"] !~ "^/(api|pipeline)" {
     url.rewrite-if-not-file = ( "" => "/index.html" )
 }
 EOF
-COPY <<EOF /docker-entrypoint.sh
+COPY <<'EOF' /docker-entrypoint.sh
 #!/bin/sh
 set -eu
 
