@@ -232,7 +232,7 @@ export function PostItem({
   const href = post.permalink
     ? `https://reddit.com${post.permalink}`
     : `https://reddit.com/r/science/comments/${post.id}`
-  const date = showDate ? new Date(post.created_utc * 1000).toLocaleDateString() : null
+  const date = showDate ? new Date(post.created_utc * 1000).toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' }) : null
 
   const itemRef    = useRef<HTMLDivElement>(null)
   const shareBtnRef = useRef<HTMLButtonElement>(null)

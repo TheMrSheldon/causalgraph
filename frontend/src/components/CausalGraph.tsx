@@ -267,6 +267,7 @@ interface CausalGraphProps {
   onNodeRightClick: (clusterId: number) => void
   onNodeClick: (clusterId: number) => void
   onEdgeClick: (edge: SelectedEdge) => void
+  onDeselect: () => void
   /** Called whenever the internal focus stack changes (ids ordered bottom→top) */
   onFocusStackChange?: (ids: number[]) => void
   /** Focus stack IDs to restore from URL on first full layout */
@@ -351,6 +352,7 @@ export function CausalGraph({
   onNodeRightClick,
   onNodeClick,
   onEdgeClick,
+  onDeselect,
   onFocusStackChange,
   initialFocusIds,
 }: CausalGraphProps) {
@@ -578,9 +580,10 @@ export function CausalGraph({
       if (evt.target === cy) {
         selectedNodeRef.current = null
         cy.elements().unselect().removeClass('edge-outgoing edge-incoming dimmed')
+        onDeselect()
       }
     })
-  }, [applyHighlight, applyChildrenHighlight, onNodeDblClick, onNodeRightClick, onNodeClick, onEdgeClick])
+  }, [applyHighlight, applyChildrenHighlight, onNodeDblClick, onNodeRightClick, onNodeClick, onEdgeClick, onDeselect])
 
   // Re-apply style when settings change (no layout re-run)
   useEffect(() => {
@@ -666,12 +669,38 @@ export function CausalGraph({
 
     // Incremental diff: remove stale elements, add new ones
     const targetIds = new Set(elements.map((e) => e.data.id as string))
+
+    // Capture positions of nodes about to be removed (expanded parents) so
+    // their children can be spawned at the same location before layout runs.
+    const removedPositions = new Map<number, { x: number; y: number }>()
+    cy.nodes().filter((n) => !targetIds.has(n.id())).forEach((n) => {
+      const id = parseInt(n.id().replace('cluster-', ''), 10)
+      removedPositions.set(id, { ...n.position() })
+    })
+
     cy.elements().filter((ele) => !targetIds.has(ele.id())).remove()
 
     const currentIds = new Set(cy.elements().map((ele) => ele.id()))
     const toAdd = elements.filter((e) => !currentIds.has(e.data.id as string))
     if (toAdd.length > 0) {
-      cy.add(toAdd)
+      const added = cy.add(toAdd)
+
+      // Seed each new child node at its parent's last position
+      const childToParent = new Map<number, number>()
+      for (const [parentId, children] of childNodesByParent) {
+        if (expandedNodes.has(parentId)) {
+          for (const child of children) childToParent.set(child.id, parentId)
+        }
+      }
+      added.nodes().forEach((n) => {
+        const childId = parseInt(n.id().replace('cluster-', ''), 10)
+        const parentId = childToParent.get(childId)
+        if (parentId !== undefined) {
+          const pos = removedPositions.get(parentId)
+          if (pos) n.position(pos)
+        }
+      })
+
       cy.layout(buildLayout(settingsRef.current.layoutAlgorithm, settingsRef.current.nodeSpacing, settingsRef.current.animationSpeed)).run()
     }
 

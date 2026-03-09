@@ -209,6 +209,12 @@ export default function App() {
     setHighlightedPostId(null)
   }, [])
 
+  const handleDeselect = useCallback(() => {
+    setSelectedCluster(null)
+    setSelectedEdge(null)
+    setHighlightedPostId(null)
+  }, [])
+
   const handleClusterClick = useCallback((clusterId: number) => {
     setSelectedCluster(clusterId)
     setSelectedEdge(null)
@@ -302,6 +308,7 @@ export default function App() {
                 onNodeRightClick={handleNodeRightClick}
                 onNodeClick={handleNodeClick}
                 onEdgeClick={handleEdgeClick}
+                onDeselect={handleDeselect}
                 onFocusStackChange={setFocusStackIds}
                 initialFocusIds={initialUrl.focus.length > 0 ? initialUrl.focus : undefined}
               />
