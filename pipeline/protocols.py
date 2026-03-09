@@ -2,7 +2,7 @@
 Protocol definitions for the four pluggable pipeline steps.
 
 Each concrete implementation must satisfy structural subtyping (duck typing).
-Use @runtime_checkable so the registry can validate conformance with isinstance().
+@runtime_checkable enables isinstance() checks in the loader.
 """
 from __future__ import annotations
 
@@ -109,7 +109,7 @@ class CausalityDetector(Protocol):
 
     @property
     def name(self) -> str:
-        """Unique registry key, e.g. 'regex', 'llm_openai', 'zero_shot'."""
+        """Short identifier for logging, e.g. 'regex', 'llm_openai', 'zero_shot'."""
         ...
 
 
@@ -143,7 +143,7 @@ class CausalExtractor(Protocol):
 
     @property
     def name(self) -> str:
-        """Unique registry key, e.g. 'regex_spacy', 'llm_openai'."""
+        """Short identifier for logging, e.g. 'regex_spacy', 'llm_openai'."""
         ...
 
 
@@ -184,7 +184,7 @@ class EventCanonizer(Protocol):
 
     @property
     def name(self) -> str:
-        """Unique registry key, e.g. 'passthrough', 'transformer', 'llm_anthropic'."""
+        """Short identifier for logging, e.g. 'passthrough', 'transformer', 'llm_anthropic'."""
         ...
 
 
@@ -223,5 +223,5 @@ class HierarchyInferrer(Protocol):
 
     @property
     def name(self) -> str:
-        """Unique registry key, e.g. 'embedding_hdbscan', 'tfidf_ward', 'llm'."""
+        """Short identifier for logging, e.g. 'embedding_hdbscan', 'tfidf_ward', 'llm'."""
         ...

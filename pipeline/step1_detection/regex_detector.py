@@ -76,7 +76,7 @@ class RegexDetector:
     Implements CausalityDetector via compiled regex patterns.
 
     All kwargs from config.yaml (beyond 'implementation') are accepted and
-    ignored so the registry can pass them without error.
+    ignored so extra config keys can be passed without error.
     """
 
     def __init__(self, **kwargs) -> None:

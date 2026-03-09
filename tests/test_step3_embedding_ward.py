@@ -311,20 +311,17 @@ def test_linkage_methods(relations_12, method):
 
 
 # ---------------------------------------------------------------------------
-# Registry integration
+# Qualified-name instantiation
 # ---------------------------------------------------------------------------
 
-def test_registry_builds_from_config():
-    from pipeline.registry import build_inferrer
-    config = {
-        "pipeline": {
-            "step3_hierarchy": {
-                "implementation": "embedding_ward",
-                "n_clusters_per_level": [4, 2, 1],
-            }
-        }
+def test_qualified_name_instantiation():
+    import importlib
+    from pipeline.runner import _build
+    step_cfg = {
+        "implementation": "pipeline.step4_hierarchy.embedding_ward_clusterer.EmbeddingWardClusterer",
+        "n_clusters_per_level": [4, 2, 1],
     }
-    inferrer = build_inferrer(config)
+    inferrer = _build(step_cfg, HierarchyInferrer)
     assert isinstance(inferrer, EmbeddingWardClusterer)
     assert isinstance(inferrer, HierarchyInferrer)
     assert inferrer.n_clusters_per_level == [4, 2, 1]

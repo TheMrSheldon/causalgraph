@@ -11,19 +11,34 @@ from typing import Literal
 
 from pipeline.db import Database
 from pipeline.parquet_reader import ParquetReader
+import copy
+import importlib
+
+import yaml
+
 from pipeline.protocols import (
     CausalityDetector,
     CausalExtractor,
     EventCanonizer,
     HierarchyInferrer,
 )
-from pipeline.registry import (
-    build_canonizer,
-    build_detector,
-    build_extractor,
-    build_inferrer,
-    load_config,
-)
+
+
+def _load_config(path: str = "config.yaml") -> dict:
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+
+def _build(step_cfg: dict, protocol_cls):
+    """Instantiate a pipeline step from a qualified class name in config."""
+    cfg = copy.deepcopy(step_cfg)
+    qualified = cfg.pop("implementation")
+    module_path, _, class_name = qualified.rpartition(".")
+    cls = getattr(importlib.import_module(module_path), class_name)
+    obj = cls(**cfg)
+    if not isinstance(obj, protocol_cls):
+        raise TypeError(f"{type(obj).__name__} does not satisfy {protocol_cls.__name__}")
+    return obj
 
 
 def run_step1(
@@ -233,7 +248,7 @@ def run_step4(
 
 
 def run_all(config_path: str = "config.yaml", step: int | None = None) -> None:
-    config = load_config(config_path)
+    config = _load_config(config_path)
     pipeline_cfg = config["pipeline"]
     db_path = pipeline_cfg["db_path"]
     batch_size = pipeline_cfg.get("batch_size", 5000)
@@ -245,19 +260,19 @@ def run_all(config_path: str = "config.yaml", step: int | None = None) -> None:
     reader = ParquetReader(pipeline_cfg["parquet_path"], min_score=min_score)
 
     if step is None or step == 1:
-        detector = build_detector(config)
+        detector = _build(pipeline_cfg["step1_detection"], CausalityDetector)
         run_step1(detector, reader, db, batch_size)
 
     if step is None or step == 2:
-        extractor = build_extractor(config)
+        extractor = _build(pipeline_cfg["step2_extraction"], CausalExtractor)
         run_step2(extractor, db)
 
     if step is None or step == 3:
-        canonizer = build_canonizer(config)
+        canonizer = _build(pipeline_cfg["step3_canonization"], EventCanonizer)
         run_step3(canonizer, db)
 
     if step is None or step == 4:
-        inferrer = build_inferrer(config)
+        inferrer = _build(pipeline_cfg["step4_hierarchy"], HierarchyInferrer)
         run_step4(inferrer, db)
 
     print("[Pipeline] All steps complete.")

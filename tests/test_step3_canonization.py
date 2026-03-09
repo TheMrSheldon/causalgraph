@@ -1,9 +1,7 @@
 """Unit tests for Step 3 canonization implementations."""
-import dataclasses
-
 import pytest
 
-from pipeline.protocols import CausalRelation, EventCanonizer
+from pipeline.protocols import EventCanonizer
 from pipeline.step3_canonization.passthrough_canonizer import PassthroughCanonizer
 
 
@@ -12,28 +10,11 @@ def canonizer():
     return PassthroughCanonizer()
 
 
-@pytest.fixture
-def relations():
-    return [
-        CausalRelation(
-            post_id="p1",
-            cause_text="Smoking",
-            effect_text="lung cancer",
-            cause_norm="smoking",
-            effect_norm="lung cancer",
-            confidence=1.0,
-            extractor="regex_spacy",
-        ),
-        CausalRelation(
-            post_id="p2",
-            cause_text="Regular exercise",
-            effect_text="improved mental health",
-            cause_norm="regular exercise",
-            effect_norm="improved mental health",
-            confidence=0.9,
-            extractor="regex_spacy",
-        ),
-    ]
+# Spans as (text, (start, end)) tuples
+_SPANS = [
+    ("Smoking increases lung cancer risk.", (0, 7)),           # "Smoking"
+    ("Regular exercise improves mental health.", (0, 16)),     # "Regular exercise"
+]
 
 
 # --- Protocol conformance ---
@@ -48,106 +29,55 @@ def test_name(canonizer):
 
 # --- Return type ---
 
-def test_returns_list(canonizer, relations):
-    result = canonizer.canonize(relations)
+def test_returns_list(canonizer):
+    result = canonizer.canonize(_SPANS)
     assert isinstance(result, list)
 
 
-def test_returns_causal_relations(canonizer, relations):
-    result = canonizer.canonize(relations)
-    assert all(isinstance(r, CausalRelation) for r in result)
+def test_returns_strings(canonizer):
+    result = canonizer.canonize(_SPANS)
+    assert all(isinstance(s, str) for s in result)
 
 
-def test_same_length(canonizer, relations):
-    result = canonizer.canonize(relations)
-    assert len(result) == len(relations)
+def test_same_length(canonizer):
+    result = canonizer.canonize(_SPANS)
+    assert len(result) == len(_SPANS)
 
 
 # --- Empty input ---
 
 def test_empty_input(canonizer):
-    result = canonizer.canonize([])
-    assert result == []
+    assert canonizer.canonize([]) == []
 
 
-# --- Canonical field population ---
+# --- Passthrough: returns the raw span text ---
 
-def test_cause_canonical_set_to_cause_text(canonizer, relations):
-    result = canonizer.canonize(relations)
-    for orig, can in zip(relations, result):
-        assert can.cause_canonical == orig.cause_text
-
-
-def test_effect_canonical_set_to_effect_text(canonizer, relations):
-    result = canonizer.canonize(relations)
-    for orig, can in zip(relations, result):
-        assert can.effect_canonical == orig.effect_text
+def test_passthrough_returns_span_text(canonizer):
+    result = canonizer.canonize(_SPANS)
+    for (text, (start, end)), canonical in zip(_SPANS, result):
+        assert canonical == text[start:end]
 
 
-# --- Immutability: original relations are not mutated ---
-
-def test_originals_not_mutated(canonizer, relations):
-    originals = [dataclasses.replace(r) for r in relations]
-    canonizer.canonize(relations)
-    for orig, saved in zip(relations, originals):
-        assert orig == saved
+def test_single_span(canonizer):
+    text = "Air pollution reduces life expectancy."
+    span = (text, (0, 13))   # "Air pollution"
+    result = canonizer.canonize([span])
+    assert result == ["Air pollution"]
 
 
-# --- Other fields preserved ---
-
-def test_post_id_preserved(canonizer, relations):
-    result = canonizer.canonize(relations)
-    for orig, can in zip(relations, result):
-        assert can.post_id == orig.post_id
-
-
-def test_cause_norm_preserved(canonizer, relations):
-    result = canonizer.canonize(relations)
-    for orig, can in zip(relations, result):
-        assert can.cause_norm == orig.cause_norm
+def test_mid_span(canonizer):
+    text = "Air pollution reduces life expectancy."
+    span = (text, (22, 37))  # "life expectancy"
+    result = canonizer.canonize([span])
+    assert result == ["life expectancy"]
 
 
-def test_effect_norm_preserved(canonizer, relations):
-    result = canonizer.canonize(relations)
-    for orig, can in zip(relations, result):
-        assert can.effect_norm == orig.effect_norm
+# --- Instantiation via qualified name ---
 
-
-def test_confidence_preserved(canonizer, relations):
-    result = canonizer.canonize(relations)
-    for orig, can in zip(relations, result):
-        assert can.confidence == orig.confidence
-
-
-def test_extractor_preserved(canonizer, relations):
-    result = canonizer.canonize(relations)
-    for orig, can in zip(relations, result):
-        assert can.extractor == orig.extractor
-
-
-# --- Single relation ---
-
-def test_single_relation(canonizer):
-    rel = CausalRelation(
-        post_id="x",
-        cause_text="Air pollution",
-        effect_text="lower life expectancy",
-        cause_norm="air pollution",
-        effect_norm="lower life expectancy",
-        confidence=1.0,
-        extractor="regex_spacy",
-    )
-    result = canonizer.canonize([rel])
-    assert len(result) == 1
-    assert result[0].cause_canonical == "Air pollution"
-    assert result[0].effect_canonical == "lower life expectancy"
-
-
-# --- Registry integration ---
-
-def test_registry_builds_passthrough():
-    from pipeline.registry import build_canonizer
-    cfg = {"pipeline": {"step3_canonization": {"implementation": "passthrough"}}}
-    canon = build_canonizer(cfg)
+def test_qualified_name_instantiation():
+    import importlib
+    module = importlib.import_module("pipeline.step3_canonization.passthrough_canonizer")
+    cls = getattr(module, "PassthroughCanonizer")
+    canon = cls()
     assert isinstance(canon, PassthroughCanonizer)
     assert canon.name == "passthrough"

@@ -35,8 +35,22 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from pipeline.protocols import Post
-from pipeline.registry import build_canonizer, build_detector, build_extractor
+import importlib
+
+from pipeline.protocols import CausalityDetector, CausalExtractor, EventCanonizer, Post
+
+
+def _build(step_cfg: dict, protocol_cls):
+    """Instantiate a pipeline step from a qualified class name in config."""
+    import copy
+    cfg = copy.deepcopy(step_cfg)
+    qualified = cfg.pop("implementation")
+    module_path, _, class_name = qualified.rpartition(".")
+    cls = getattr(importlib.import_module(module_path), class_name)
+    obj = cls(**cfg)
+    if not isinstance(obj, protocol_cls):
+        raise TypeError(f"{type(obj).__name__} does not satisfy {protocol_cls.__name__}")
+    return obj
 
 # Use uvicorn's own error logger so messages appear in the uvicorn console
 # output without needing to configure a separate handler.
@@ -62,30 +76,32 @@ def _get_config() -> dict:
         return yaml.safe_load(f)
 
 
-def _inject_device(config: dict, step_key: str, gpu_impls: set[str]) -> dict:
-    """Return a deep-copied config with device injected for GPU-capable steps."""
-    cfg = copy.deepcopy(config)
-    step_cfg = cfg["pipeline"][step_key]
-    if step_cfg.get("implementation") in gpu_impls and "device" not in step_cfg:
-        step_cfg["device"] = _DEVICE
+def _inject_device(step_cfg: dict, gpu_class_names: set[str]) -> dict:
+    """Return a copy of step_cfg with device injected when the class is GPU-capable."""
+    cfg = copy.deepcopy(step_cfg)
+    class_name = cfg.get("implementation", "").rpartition(".")[2]
+    if class_name in gpu_class_names and "device" not in cfg:
+        cfg["device"] = _DEVICE
     return cfg
 
 
 @lru_cache(maxsize=1)
 def _get_detector():
-    cfg = _inject_device(_get_config(), "step1_detection", {"zero_shot"})
-    return build_detector(cfg)
+    pipeline_cfg = _get_config()["pipeline"]
+    step_cfg = _inject_device(pipeline_cfg["step1_detection"], {"ZeroShotDetector"})
+    return _build(step_cfg, CausalityDetector)
 
 
 @lru_cache(maxsize=1)
 def _get_extractor():
-    return build_extractor(_get_config())
+    return _build(_get_config()["pipeline"]["step2_extraction"], CausalExtractor)
 
 
 @lru_cache(maxsize=1)
 def _get_canonizer():
-    cfg = _inject_device(_get_config(), "step3_canonization", {"transformer"})
-    return build_canonizer(cfg)
+    pipeline_cfg = _get_config()["pipeline"]
+    step_cfg = _inject_device(pipeline_cfg["step3_canonization"], {"TransformerCanonizer"})
+    return _build(step_cfg, EventCanonizer)
 
 
 # ── Startup: preload all models ───────────────────────────────────────────────

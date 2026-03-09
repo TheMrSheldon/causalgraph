@@ -5,28 +5,36 @@ pipeline:
   min_score: 1            # Skip posts with score below this
 
   step1_detection:
-    implementation: "regex"       # Options: regex | llm_openai | llm_anthropic | zero_shot
+    implementation: "pipeline.step1_detection.regex_detector.RegexDetector"
+    # Alternatives:
+    #   pipeline.step1_detection.llm_detector.LLMDetector
+    #   pipeline.step1_detection.zero_shot_detector.ZeroShotDetector
 
-    # Zero-shot options (only used when implementation = zero_shot)
+    # Zero-shot options (only used with ZeroShotDetector)
     zero_shot_model: "facebook/bart-large-mnli"
     zero_shot_threshold: 0.75
 
-    # LLM options (only used when implementation = llm_openai or llm_anthropic)
+    # LLM options (only used with LLMDetector)
     llm_model: "claude-haiku-4-5-20251001"
     llm_batch_size: 50
 
   step2_extraction:
-    implementation: "regex_spacy"   # Options: regex_spacy | llm_openai | llm_anthropic
+    implementation: "pipeline.step2_extraction.regex_spacy_extractor.RegexSpacyExtractor"
+    # Alternatives:
+    #   pipeline.step2_extraction.llm_extractor.LLMExtractor
     spacy_model: "en_core_web_sm"   # or en_core_web_trf for better accuracy
 
-    # LLM options (only used when implementation = llm_*)
+    # LLM options (only used with LLMExtractor)
     llm_model: "claude-haiku-4-5-20251001"
     llm_max_tokens: 512
 
   step3_canonization:
-    implementation: "transformer"   # Options: passthrough | transformer | llm_openai | llm_anthropic
+    implementation: "pipeline.step3_canonization.transformer_canonizer.TransformerCanonizer"
+    # Alternatives:
+    #   pipeline.step3_canonization.passthrough_canonizer.PassthroughCanonizer
+    #   pipeline.step3_canonization.llm_canonizer.LLMCanonizer
 
-    # Transformer options (only used when implementation = transformer)
+    # TransformerCanonizer options
     # Default: Qwen2.5-1.5B-Instruct (~3 GB RAM on CPU)
     # Upgrade: Qwen/Qwen2.5-3B-Instruct or mistralai/Mistral-7B-Instruct-v0.3
     model_name: "Qwen/Qwen2.5-1.5B-Instruct"
@@ -34,15 +42,19 @@ pipeline:
     max_new_tokens: 24                 # Max output tokens; event spans are short
     device: 0                          # -1 = CPU; 0 = first CUDA GPU
 
-    # LLM options (only used when implementation = llm_*)
+    # LLM options (only used with LLMCanonizer)
     llm_model: "claude-haiku-4-5-20251001"
     llm_batch_size: 50
     llm_max_tokens: 1024
 
   step4_hierarchy:
-    implementation: "embedding_ward"  # Options: embedding_hdbscan | tfidf_ward | embedding_ward | llm
+    implementation: "pipeline.step4_hierarchy.embedding_ward_clusterer.EmbeddingWardClusterer"
+    # Alternatives:
+    #   pipeline.step4_hierarchy.tfidf_clusterer.TFIDFClusterer
+    #   pipeline.step4_hierarchy.embedding_clusterer.EmbeddingClusterer
+    #   pipeline.step4_hierarchy.llm_topic_grouper.LLMTopicGrouper
 
-    # Embedding + Ward linkage options (used when implementation = embedding_ward)
+    # EmbeddingWardClusterer options
     embedding_model: "all-MiniLM-L6-v2"
     linkage_method: "ward"
     n_clusters_per_level: [500, 100, 20]  # clusters at each level, finest → coarsest
