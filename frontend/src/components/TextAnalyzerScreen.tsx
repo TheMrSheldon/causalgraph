@@ -159,28 +159,32 @@ function RelationRow({
   const causeDimmed = anySelected && !selectedIndices.has(rel.cause_event_index)
   const effectDimmed = anySelected && !selectedIndices.has(rel.effect_event_index)
 
+  const typeClass = isNoRel ? ' analyzer-relation--no-rel'
+    : rel.relation_type === 'countercausal' ? ' analyzer-relation--countercausal'
+    : ' analyzer-relation--causal'
+
   return (
     <div
-      className={`analyzer-relation${isNoRel ? ' analyzer-relation--no-rel' : ''}${showProbs ? ' analyzer-relation--expanded' : ''}`}
+      className={`analyzer-relation${typeClass}${showProbs ? ' analyzer-relation--expanded' : ''}`}
       onClick={() => setShowProbs(v => !v)}
       title={showProbs ? 'Click to hide certainty scores' : 'Click to show certainty scores'}
       style={{ cursor: 'pointer' }}
     >
       <span className="analyzer-relation-row">
         <span className="analyzer-event-cell" style={{ opacity: causeDimmed ? 0.45 : 1, transition: 'opacity 0.12s' }}>
-          <mark style={{ background: isNoRel ? '#f1f5f9' : eventColor(rel.cause_event_index) }}>
+          <mark style={{ background: eventColor(rel.cause_event_index) }}>
             {causeLabel}
           </mark>
           {causeRaw && <span className="analyzer-span-raw">{causeRaw}</span>}
         </span>
         <span
-          className={`analyzer-relation-arrow${isNoRel ? ' analyzer-relation-arrow--no-rel' : ''}`}
+          className={`analyzer-relation-arrow${isNoRel ? ' analyzer-relation-arrow--no-rel' : rel.relation_type === 'countercausal' ? ' analyzer-relation-arrow--countercausal' : ''}`}
           title={arrowTitle}
         >
           {arrow}
         </span>
         <span className="analyzer-event-cell" style={{ opacity: effectDimmed ? 0.45 : 1, transition: 'opacity 0.12s' }}>
-          <mark style={{ background: isNoRel ? '#f1f5f9' : eventColor(rel.effect_event_index) }}>
+          <mark style={{ background: eventColor(rel.effect_event_index) }}>
             {effectLabel}
           </mark>
           {effectRaw && <span className="analyzer-span-raw">{effectRaw}</span>}
@@ -205,8 +209,6 @@ function RelationsDisplay({
   events: AnalysisEvent[]
   selectedIndices: Set<number>
 }) {
-  const [noRelOpen, setNoRelOpen] = useState(false)
-
   const isVisible = (r: AnalysisRelation) => {
     if (selectedIndices.size === 0) return true
     if (selectedIndices.size === 1)
@@ -219,9 +221,6 @@ function RelationsDisplay({
   const visibleCausal = causal.filter(isVisible)
   const visibleNoRel  = noRel.filter(isVisible)
 
-  // Auto-expand no-rel section when filter would produce results there
-  const effectiveNoRelOpen = noRelOpen || (selectedIndices.size > 0 && visibleNoRel.length > 0)
-
   if (relations.length === 0) {
     return (
       <p className="hint">
@@ -231,7 +230,6 @@ function RelationsDisplay({
   }
 
   const filterActive = selectedIndices.size > 0
-  const nothingVisible = visibleCausal.length === 0 && visibleNoRel.length === 0
 
   return (
     <>
@@ -253,25 +251,19 @@ function RelationsDisplay({
         </>
       )}
 
-      {(noRel.length > 0) && (
+      {filterActive && visibleNoRel.length > 0 && (
         <>
-          <button
-            className={`analyzer-no-rel-toggle${effectiveNoRelOpen ? ' analyzer-no-rel-toggle--open' : ''}`}
-            onClick={() => setNoRelOpen(v => !v)}
-          >
-            <span className="analyzer-chevron" aria-hidden>›</span>
-            {filterActive
-              ? `${visibleNoRel.length} of ${noRel.length} no-rel pair${noRel.length !== 1 ? 's' : ''} match`
-              : `${noRel.length} pair${noRel.length !== 1 ? 's' : ''} with no causal link`}
-            {!filterActive && <span className="analyzer-hover-hint">click for certainty</span>}
-          </button>
-          {effectiveNoRelOpen && (filterActive ? visibleNoRel : noRel).map((r, i) => (
+          <div className="cluster-section-label" style={{ marginTop: 12 }}>
+            No causal link
+            <span className="analyzer-hover-hint">{visibleNoRel.length} pair{visibleNoRel.length !== 1 ? 's' : ''} · click for certainty</span>
+          </div>
+          {visibleNoRel.map((r, i) => (
             <RelationRow key={i} rel={r} events={events} selectedIndices={selectedIndices} />
           ))}
         </>
       )}
 
-      {filterActive && nothingVisible && (
+      {filterActive && visibleCausal.length === 0 && visibleNoRel.length === 0 && (
         <p className="hint" style={{ marginTop: 8 }}>No relationships between the selected spans.</p>
       )}
     </>
@@ -376,7 +368,7 @@ export function TextAnalyzerScreen({
         <textarea
           className="analyzer-textarea"
           value={text}
-          onChange={e => { onTextChange(e.target.value); setResult(null); setSelectedIndices(new Set()) }}
+          onChange={e => onTextChange(e.target.value)}
           placeholder="Paste or type text containing causal statements…"
           spellCheck={false}
         />

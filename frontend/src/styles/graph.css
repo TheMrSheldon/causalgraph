@@ -1268,7 +1268,7 @@ html, body, #root {
 
 .analyzer-screen {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 2fr 3fr;
   grid-template-rows: auto 1fr;
   height: 100%;
   overflow: hidden;
@@ -1331,25 +1331,35 @@ html, body, #root {
 }
 
 .analyzer-highlighted-text {
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: 14px;
+  line-height: 1.8;
   background: #fff;
-  border: 1px solid var(--webis-border);
-  border-radius: 3px;
-  padding: 10px 12px;
+  border: 1px solid #c7d2de;
+  border-radius: 4px;
+  padding: 12px 14px;
   white-space: pre-wrap;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 
 .analyzer-relation {
-  padding: 7px 0;
-  border-bottom: 1px solid #eee;
+  padding: 7px 10px 7px 12px;
+  margin-bottom: 4px;
+  border-left: 3px solid #e2e8f0;
+  border-radius: 0 4px 4px 0;
   display: flex;
   flex-direction: column;
   gap: 5px;
+  background: #fafbfc;
 }
 
-.analyzer-relation:last-child {
-  border-bottom: none;
+.analyzer-relation--causal {
+  border-left-color: #22c55e;
+  background: #f0fdf4;
+}
+
+.analyzer-relation--countercausal {
+  border-left-color: #ef4444;
+  background: #fef2f2;
 }
 
 .analyzer-relation-row {
@@ -1370,8 +1380,15 @@ html, body, #root {
 }
 
 .analyzer-relation-arrow {
-  color: #aaa;
+  color: #22c55e;
+  font-size: 16px;
+  font-weight: 700;
   flex-shrink: 0;
+  letter-spacing: -0.02em;
+}
+
+.analyzer-relation-arrow--countercausal {
+  color: #ef4444;
 }
 
 /* Wrapper for canonical label + optional raw-span subtitle */
@@ -1502,32 +1519,48 @@ html, body, #root {
 /* ── Relation row interaction ────────────────────────────────────────── */
 
 .analyzer-relation:hover {
-  background: #f8fafc;
-  border-radius: 4px;
+  background: #f1f5f9;
+}
+
+.analyzer-relation--causal:hover {
+  background: #dcfce7;
+}
+
+.analyzer-relation--countercausal:hover {
+  background: #fee2e2;
 }
 
 .analyzer-relation--expanded {
-  background: #f1f5f9;
-  border-radius: 4px;
+  background: #e9eff6;
+}
+
+.analyzer-relation--causal.analyzer-relation--expanded {
+  background: #dcfce7;
+}
+
+.analyzer-relation--countercausal.analyzer-relation--expanded {
+  background: #fecaca;
 }
 
 .analyzer-relation--expanded:hover {
-  background: #e9eff6;
+  background: #dde5ef;
 }
 
 /* ── No-rel relation rows ────────────────────────────────────────────── */
 
 .analyzer-relation--no-rel {
-  opacity: 0.65;
+  border-left-color: #cbd5e1;
+  background: #f8fafc;
 }
 
 .analyzer-relation--no-rel:hover {
-  opacity: 1;
+  background: #f1f5f9;
 }
 
 .analyzer-relation-arrow--no-rel {
-  color: #cbd5e1;
+  color: #94a3b8;
   font-size: 15px;
+  font-weight: 400;
 }
 
 .analyzer-chevron {
@@ -1554,38 +1587,6 @@ html, body, #root {
   color: #64748b;
 }
 
-/* Chevron on the no-rel toggle — open state */
-.analyzer-no-rel-toggle--open .analyzer-chevron {
-  transform: rotate(90deg);
-  color: #64748b;
-}
-
-/* ── No-rel collapsible toggle ───────────────────────────────────────── */
-
-.analyzer-no-rel-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 14px;
-  padding: 5px 0;
-  background: none;
-  border: none;
-  border-top: 1px dashed #e2e8f0;
-  width: 100%;
-  text-align: left;
-  font: inherit;
-  font-size: 12px;
-  color: #94a3b8;
-  cursor: pointer;
-}
-
-.analyzer-no-rel-toggle:hover {
-  color: #64748b;
-}
-
-.analyzer-no-rel-toggle:hover .analyzer-chevron {
-  color: #94a3b8;
-}
 
 /* ── Events legend ───────────────────────────────────────────────────── */
 
@@ -1594,8 +1595,9 @@ html, body, #root {
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 10px;
-  padding: 6px 8px;
+  margin-top: 12px;
+  margin-bottom: 4px;
+  padding: 7px 10px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 4px;
@@ -1615,17 +1617,18 @@ html, body, #root {
 .analyzer-event-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 2px 8px 2px 5px;
+  border: 1px solid #d1dae5;
+  border-radius: 12px;
+  padding: 3px 10px 3px 6px;
   color: #334155;
   white-space: nowrap;
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   transition: border-color 0.1s, box-shadow 0.1s, opacity 0.12s;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
 }
 
 .analyzer-event-chip:hover {
