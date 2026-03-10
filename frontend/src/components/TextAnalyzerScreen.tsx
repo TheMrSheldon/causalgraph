@@ -117,8 +117,13 @@ The likelihood that a cat causes reduction in vascular disease effects is in my 
 // ---------------------------------------------------------------------------
 // Main screen
 // ---------------------------------------------------------------------------
-export function TextAnalyzerScreen() {
-  const [text, setText] = useState('')
+export function TextAnalyzerScreen({
+  text,
+  onTextChange,
+}: {
+  text: string
+  onTextChange: (t: string) => void
+}) {
   const [result, setResult] = useState<AnalysisResponse | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -144,7 +149,7 @@ export function TextAnalyzerScreen() {
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             className="analyzer-btn-secondary"
-            onClick={() => { setText(EXAMPLE); setResult(null); setError(null) }}
+            onClick={() => { onTextChange(EXAMPLE); setResult(null); setError(null) }}
           >
             Load example
           </button>
@@ -171,7 +176,7 @@ export function TextAnalyzerScreen() {
         <textarea
           className="analyzer-textarea"
           value={text}
-          onChange={e => setText(e.target.value)}
+          onChange={e => { onTextChange(e.target.value); setResult(null) }}
           placeholder="Paste or type text containing causal statements…"
           spellCheck={false}
         />

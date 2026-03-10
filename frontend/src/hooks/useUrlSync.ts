@@ -14,14 +14,15 @@ const PATH_TO_SCREEN: Record<string, Screen> = {
 }
 
 export interface UrlState {
-  screen:   Screen
-  node:     number | null
-  edge:     { source: number; target: number } | null
-  expanded: number[]
-  focus:    number[]
-  post:     string | null
-  backend:  string
-  pipeline: string
+  screen:       Screen
+  node:         number | null
+  edge:         { source: number; target: number } | null
+  expanded:     number[]
+  focus:        number[]
+  post:         string | null
+  backend:      string
+  pipeline:     string
+  analyzerText: string
 }
 
 export function readUrlState(): UrlState {
@@ -53,11 +54,12 @@ export function readUrlState(): UrlState {
     ? focusStr.split(',').map(Number).filter((n) => !isNaN(n))
     : []
 
-  const post     = params.get('post')
-  const backend  = params.get('backend')  ?? ''
-  const pipeline = params.get('pipeline') ?? ''
+  const post         = params.get('post')
+  const backend      = params.get('backend')      ?? ''
+  const pipeline     = params.get('pipeline')     ?? ''
+  const analyzerText = params.get('q')            ?? ''
 
-  return { screen, node, edge, expanded, focus, post, backend, pipeline }
+  return { screen, node, edge, expanded, focus, post, backend, pipeline, analyzerText }
 }
 
 export function syncUrlState(state: UrlState, replace = true): void {
@@ -71,6 +73,7 @@ export function syncUrlState(state: UrlState, replace = true): void {
   if (state.post)                params.set('post',     state.post)
   if (state.backend)             params.set('backend',  state.backend)
   if (state.pipeline)            params.set('pipeline', state.pipeline)
+  if (state.analyzerText)        params.set('q',        state.analyzerText)
 
   const search  = params.toString() ? `?${params.toString()}` : ''
   const url     = `${path}${search}`

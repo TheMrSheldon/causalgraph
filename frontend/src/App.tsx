@@ -32,6 +32,7 @@ export default function App() {
   const dragState = useRef<{ startX: number; startWidth: number } | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [statsOpen, setStatsOpen] = useState(false)
+  const [analyzerText, setAnalyzerText] = useState(initialUrl.analyzerText)
 
   // Backend / pipeline override URLs (reactive so they're synced to URL)
   const [backendUrl,  setBackendUrl]  = useState(() => {
@@ -115,11 +116,12 @@ export default function App() {
       post:     highlightedPostId,
       backend:  backendUrl,
       pipeline: pipelineUrl,
+      analyzerText,
     })
   // expandedNodes is derived below — its identity changes on every expansion;
   // include it by spreading the dependency list manually
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeScreen, selectedCluster, selectedEdge, focusStackIds, highlightedPostId, backendUrl, pipelineUrl])
+  }, [activeScreen, selectedCluster, selectedEdge, focusStackIds, highlightedPostId, backendUrl, pipelineUrl, analyzerText])
 
   const childNodesByParent = useMemo(() => {
     const map = new Map()
@@ -157,6 +159,7 @@ export default function App() {
       post:     highlightedPostId,
       backend:  backendUrl,
       pipeline: pipelineUrl,
+      analyzerText,
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expandedNodes])
@@ -213,6 +216,11 @@ export default function App() {
     setSelectedCluster(null)
     setSelectedEdge(null)
     setHighlightedPostId(null)
+  }, [])
+
+  const handleAnalyzePost = useCallback((title: string) => {
+    setAnalyzerText(title)
+    setActiveScreen('analyzer')
   }, [])
 
   const handleClusterClick = useCallback((clusterId: number) => {
@@ -330,6 +338,7 @@ export default function App() {
                   targetLabel={clusterLabels.get(selectedEdge.target_cluster_id)}
                   onClusterClick={handleClusterClick}
                   highlightedPostId={highlightedPostId}
+                  onAnalyzePost={handleAnalyzePost}
                 />
               : <ClusterPanel
                   clusterId={selectedCluster}
@@ -338,6 +347,7 @@ export default function App() {
                   isExpanded={isExpanded}
                   onCollapseRequest={collapseCluster}
                   highlightedPostId={highlightedPostId}
+                  onAnalyzePost={handleAnalyzePost}
                 />
             }
           </aside>
@@ -352,7 +362,7 @@ export default function App() {
 
       {activeScreen === 'analyzer' && (
         <div className="screen-fullwidth">
-          <TextAnalyzerScreen />
+          <TextAnalyzerScreen text={analyzerText} onTextChange={setAnalyzerText} />
         </div>
       )}
 

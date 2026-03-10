@@ -8,9 +8,10 @@ interface PostListProps {
   targetLabel?: string
   onClusterClick: (clusterId: number) => void
   highlightedPostId?: string | null
+  onAnalyzePost?: (text: string) => void
 }
 
-export function PostList({ edge, sourceLabel, targetLabel, onClusterClick, highlightedPostId }: PostListProps) {
+export function PostList({ edge, sourceLabel, targetLabel, onClusterClick, highlightedPostId, onAnalyzePost }: PostListProps) {
   const { data, isLoading } = usePostsForEdge(edge)
 
   if (!edge) return null
@@ -36,7 +37,7 @@ export function PostList({ edge, sourceLabel, targetLabel, onClusterClick, highl
         <>
           <div className="cluster-section-label">{data.total.toLocaleString()} posts</div>
           {data.posts.map((post) => (
-            <PostItem key={post.id} post={post} showDate highlighted={post.id === highlightedPostId} onClusterClick={onClusterClick} />
+            <PostItem key={post.id} post={post} showDate highlighted={post.id === highlightedPostId} onClusterClick={onClusterClick} onAnalyze={onAnalyzePost} />
           ))}
         </>
       )}

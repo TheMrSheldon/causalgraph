@@ -221,6 +221,7 @@ export function PostItem({
   showDate = false,
   highlighted = false,
   onClusterClick,
+  onAnalyze,
 }: {
   post: EdgePostSummary
   showDate?: boolean
@@ -228,6 +229,8 @@ export function PostItem({
   highlighted?: boolean
   /** Navigate to a cluster when an event span is clicked */
   onClusterClick?: (clusterId: number) => void
+  /** Navigate to the Text Analyzer with this post's title pre-filled */
+  onAnalyze?: (text: string) => void
 }) {
   const href = post.permalink
     ? `https://reddit.com${post.permalink}`
@@ -272,6 +275,19 @@ export function PostItem({
         <span className="post-meta">
           ↑ {post.score} · {post.num_comments} comments{date ? ` · ${date}` : ''}
         </span>
+        {onAnalyze && (
+          <button
+            className="share-btn"
+            onClick={(e) => { e.stopPropagation(); onAnalyze(post.title) }}
+            title="Analyze"
+          >
+            {/* Magnifying-glass icon */}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+          </button>
+        )}
         <button
           ref={shareBtnRef}
           className={`share-btn${shareRect ? ' share-btn--active' : ''}`}

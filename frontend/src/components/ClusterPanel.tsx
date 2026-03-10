@@ -9,6 +9,7 @@ interface ClusterPanelProps {
   onCollapseRequest?: (id: number) => void
   showHighlightSpans?: boolean
   highlightedPostId?: string | null
+  onAnalyzePost?: (text: string) => void
 }
 
 const LEVEL_META = [
@@ -17,7 +18,7 @@ const LEVEL_META = [
   { label: 'Top',  cls: 'wlabel'                 },
 ] as const
 
-export function ClusterPanel({ clusterId, clusterLabels, onClusterClick, isExpanded, onCollapseRequest, highlightedPostId }: ClusterPanelProps) {
+export function ClusterPanel({ clusterId, clusterLabels, onClusterClick, isExpanded, onCollapseRequest, highlightedPostId, onAnalyzePost }: ClusterPanelProps) {
   const { data, isLoading } = useCluster(clusterId)
   const { data: postsData, isLoading: postsLoading } = useClusterPosts(clusterId)
 
@@ -106,6 +107,7 @@ export function ClusterPanel({ clusterId, clusterLabels, onClusterClick, isExpan
               showDate
               highlighted={p.id === highlightedPostId}
               onClusterClick={onClusterClick}
+              onAnalyze={onAnalyzePost}
             />
           ))}
         </>
