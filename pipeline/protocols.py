@@ -7,12 +7,19 @@ Each concrete implementation must satisfy structural subtyping (duck typing).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Protocol, runtime_checkable
 
 
 # ---------------------------------------------------------------------------
 # Shared data structures
 # ---------------------------------------------------------------------------
+
+class RelationType(str, Enum):
+    NoRel = "no_rel"
+    Causal = "causal"
+    Countercausal = "countercausal"
+
 
 @dataclass
 class Post:
@@ -41,8 +48,9 @@ class CausalRelation:
                                  to cause_text when this is empty.
 
     confidence=1.0 for deterministic (rule-based) extractors.
-    is_countercausal=True when the title explicitly negates the causal claim
-    (e.g. "X does not cause Y", "no link between X and Y").
+    relation_type: RelationType.Causal for affirmative causal claims,
+    RelationType.Countercausal when negated (e.g. "X does not cause Y"),
+    RelationType.NoRel for pairs classified as unrelated (not persisted).
 
     p_none / p_causal / p_countercausal: per-label probabilities (or
     pseudo-probabilities for rule-based extractors). These are NOT persisted
@@ -55,7 +63,7 @@ class CausalRelation:
     effect_norm: str
     confidence: float = 1.0
     extractor: str = ""
-    is_countercausal: bool = False
+    relation_type: RelationType = RelationType.Causal
     cause_canonical: str = ""   # self-contained description (from Step 3)
     effect_canonical: str = ""  # self-contained description (from Step 3)
     post_title: str = ""        # title of the source post — context for canonization

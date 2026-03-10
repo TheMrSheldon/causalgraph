@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from ..protocols import CausalityExtractor, CausalRelation, Post
+from ..protocols import CausalityExtractor, CausalRelation, Post, RelationType
 
 
 def _normalize(text: str) -> str:
@@ -198,7 +198,7 @@ def _extract_with_spacy(title: str, nlp) -> list[tuple[str, str]] | None:
     return None
 
 
-def _label_probs(is_countercausal: bool, source: str) -> dict:
+def _label_probs(source: str) -> dict:
     """
     Return pseudo-probability scores for each label.
     Rule-based matches use hard pseudo-probabilities reflecting certainty;
@@ -238,7 +238,7 @@ class RegexSpacyExtractor(CausalityExtractor):
 
     def extract(self, post: Post) -> list[CausalRelation]:
         title = post.title
-        pairs: list[tuple[str, str, bool, str]] = []  # (cause, effect, is_cc, source)
+        pairs: list[tuple[str, str, RelationType, str]] = []  # (cause, effect, relation_type, source)
 
         # Check negation patterns first (take priority)
         for pattern, cause_group, effect_group in _NEGATION_PATTERNS:
@@ -247,7 +247,7 @@ class RegexSpacyExtractor(CausalityExtractor):
                 cause = _clean_phrase(m.group(cause_group))
                 effect = _clean_phrase(m.group(effect_group))
                 if cause and effect and cause != effect:
-                    pairs.append((cause, effect, True, "negation"))
+                    pairs.append((cause, effect, RelationType.Countercausal, "negation"))
                     break
 
         # Try each causal pattern in order; take first match
@@ -258,7 +258,7 @@ class RegexSpacyExtractor(CausalityExtractor):
                     cause = _clean_phrase(m.group(cause_group))
                     effect = _clean_phrase(m.group(effect_group))
                     if cause and effect and cause != effect:
-                        pairs.append((cause, effect, False, "regex"))
+                        pairs.append((cause, effect, RelationType.Causal, "regex"))
                         break
 
         # If regex failed, try spaCy dependency parse
@@ -267,7 +267,7 @@ class RegexSpacyExtractor(CausalityExtractor):
             if nlp:
                 spacy_pairs = _extract_with_spacy(title, nlp)
                 if spacy_pairs:
-                    pairs.extend((c, e, False, "spacy") for c, e in spacy_pairs)
+                    pairs.extend((c, e, RelationType.Causal, "spacy") for c, e in spacy_pairs)
 
         return [
             CausalRelation(
@@ -278,9 +278,9 @@ class RegexSpacyExtractor(CausalityExtractor):
                 effect_norm=_normalize(effect),
                 confidence=1.0,
                 extractor=self.name,
-                is_countercausal=is_cc,
-                **_label_probs(is_cc, source),
+                relation_type=relation_type,
+                **_label_probs(source),
             )
-            for cause, effect, is_cc, source in pairs
+            for cause, effect, relation_type, source in pairs
             if cause and effect
         ]

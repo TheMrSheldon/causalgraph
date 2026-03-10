@@ -89,8 +89,8 @@ function RelationRow({ rel, events }: { rel: AnalysisRelation; events: AnalysisE
           </mark>
           {causeRaw && <span className="analyzer-span-raw">{causeRaw}</span>}
         </span>
-        <span className="analyzer-relation-arrow" title={rel.is_countercausal ? 'refuted' : 'causes'}>
-          {rel.is_countercausal ? '↛' : '→'}
+        <span className="analyzer-relation-arrow" title={rel.relation_type === 'countercausal' ? 'refuted' : 'causes'}>
+          {rel.relation_type === 'countercausal' ? '↛' : '→'}
         </span>
         <span className="analyzer-event-cell">
           <mark className="span-effect" style={{ background: eventColor(rel.effect_event_index) }}>
@@ -98,7 +98,7 @@ function RelationRow({ rel, events }: { rel: AnalysisRelation; events: AnalysisE
           </mark>
           {effectRaw && <span className="analyzer-span-raw">{effectRaw}</span>}
         </span>
-        {rel.is_countercausal && <span className="countercausal-badge">refuted</span>}
+        {rel.relation_type === 'countercausal' && <span className="countercausal-badge">refuted</span>}
       </span>
       {showProbs && <ProbTooltip rel={rel} />}
     </div>

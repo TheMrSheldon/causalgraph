@@ -56,7 +56,7 @@ export interface RelationSpan {
   effect_canonical: string | null;
   cause_cluster_id: number | null;
   effect_cluster_id: number | null;
-  is_countercausal: boolean;
+  relation_type: 'causal' | 'countercausal' | 'no_rel';
 }
 
 export interface EdgePostSummary extends PostSummary {
@@ -119,7 +119,7 @@ export interface AnalysisRelation {
   effect_text: string
   cause_canonical: string   // self-contained description from Step 3; may equal cause_text
   effect_canonical: string  // self-contained description from Step 3; may equal effect_text
-  is_countercausal: boolean
+  relation_type: 'causal' | 'countercausal' | 'no_rel'
   p_none: number
   p_causal: number
   p_countercausal: number

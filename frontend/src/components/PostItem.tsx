@@ -242,7 +242,7 @@ export function PostItem({
   const [shareRect, setShareRect] = useState<DOMRect | null>(null)
 
   const relations = post.relations ?? []
-  const isCountercausal = relations.some(r => r.is_countercausal)
+  const isCountercausal = relations.some(r => r.relation_type === 'countercausal')
 
   // Scroll + flash on highlighted mount
   useEffect(() => {

@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
 
-from .protocols import CausalRelation, EventCluster, Post
+from .protocols import CausalRelation, EventCluster, Post, RelationType
 
 SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS causal_relations (
     effect_canonical  TEXT NOT NULL DEFAULT '',
     confidence        REAL NOT NULL DEFAULT 1.0,
     extractor         TEXT NOT NULL DEFAULT '',
-    is_countercausal  INTEGER NOT NULL DEFAULT 0,
+    relation_type     TEXT NOT NULL DEFAULT 'causal',
     extracted_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -117,7 +117,7 @@ SELECT
     COUNT(DISTINCT cr.id),
     COUNT(DISTINCT cr.post_id),
     AVG(p.score),
-    SUM(CASE WHEN cr.is_countercausal = 1 THEN 1 ELSE 0 END)
+    SUM(CASE WHEN cr.relation_type = 'countercausal' THEN 1 ELSE 0 END)
 FROM causal_relations cr
 JOIN cluster_members cm_cause
   ON cm_cause.relation_id = cr.id AND cm_cause.role = 'cause'
@@ -152,8 +152,10 @@ class Database:
             conn.executescript(SCHEMA_SQL)
             # Migrations for existing databases
             existing = {r[1] for r in conn.execute("PRAGMA table_info(causal_relations)").fetchall()}
-            if "is_countercausal" not in existing:
-                conn.execute("ALTER TABLE causal_relations ADD COLUMN is_countercausal INTEGER NOT NULL DEFAULT 0")
+            if "relation_type" not in existing:
+                conn.execute("ALTER TABLE causal_relations ADD COLUMN relation_type TEXT NOT NULL DEFAULT 'causal'")
+                if "is_countercausal" in existing:
+                    conn.execute("UPDATE causal_relations SET relation_type = 'countercausal' WHERE is_countercausal = 1")
             if "cause_canonical" not in existing:
                 conn.execute("ALTER TABLE causal_relations ADD COLUMN cause_canonical TEXT NOT NULL DEFAULT ''")
             if "effect_canonical" not in existing:
@@ -196,7 +198,7 @@ class Database:
         sql = """
             INSERT INTO causal_relations
                 (post_id, cause_text, effect_text, cause_norm, effect_norm,
-                 cause_canonical, effect_canonical, confidence, extractor, is_countercausal)
+                 cause_canonical, effect_canonical, confidence, extractor, relation_type)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         ids: list[int] = []
@@ -207,7 +209,7 @@ class Database:
                     r.cause_norm, r.effect_norm,
                     r.cause_canonical, r.effect_canonical,
                     r.confidence, r.extractor,
-                    int(r.is_countercausal),
+                    r.relation_type.value,
                 ))
                 ids.append(cur.lastrowid)
         return ids
@@ -240,7 +242,7 @@ class Database:
         sql = """
             SELECT cr.post_id, cr.cause_text, cr.effect_text, cr.cause_norm, cr.effect_norm,
                    cr.cause_canonical, cr.effect_canonical, cr.confidence, cr.extractor,
-                   cr.is_countercausal, p.title AS post_title
+                   cr.relation_type, p.title AS post_title
             FROM causal_relations cr
             JOIN posts p ON p.id = cr.post_id
         """
@@ -257,7 +259,7 @@ class Database:
                 effect_canonical=r["effect_canonical"] or "",
                 confidence=r["confidence"],
                 extractor=r["extractor"],
-                is_countercausal=bool(r["is_countercausal"]),
+                relation_type=RelationType(r["relation_type"] or "causal"),
                 post_title=r["post_title"] or "",
             )
             for r in rows
@@ -506,7 +508,7 @@ class Database:
         )
         sql = f"""
             SELECT p.id, p.title, p.score, p.num_comments, p.created_utc, p.permalink,
-                   cr.cause_text, cr.effect_text, cr.is_countercausal
+                   cr.cause_text, cr.effect_text, cr.relation_type
             FROM posts p
             JOIN (
                 SELECT cr2.post_id, MIN(cr2.id) AS min_cr_id
@@ -556,7 +558,7 @@ class Database:
             # One row per post: pick the first matching causal relation (lowest id)
             sql = f"""
                 SELECT p.id, p.title, p.score, p.num_comments, p.created_utc, p.permalink,
-                       cr.cause_text, cr.effect_text, cr.is_countercausal
+                       cr.cause_text, cr.effect_text, cr.relation_type
                 FROM posts p
                 JOIN (
                     SELECT cr2.post_id, MIN(cr2.id) AS min_cr_id
@@ -589,7 +591,7 @@ class Database:
     def get_post_by_id(self, post_id: str) -> dict | None:
         sql = """
             SELECT p.id, p.title, p.score, p.num_comments, p.created_utc, p.permalink,
-                   cr.cause_text, cr.effect_text, cr.confidence, cr.is_countercausal
+                   cr.cause_text, cr.effect_text, cr.confidence, cr.relation_type
             FROM posts p
             LEFT JOIN causal_relations cr ON cr.post_id = p.id
             WHERE p.id = ?

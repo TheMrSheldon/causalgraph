@@ -8,7 +8,7 @@ step1_detection:
   implementation: "pipeline.step1_detection.transformer_detector.TransformerDetector"
 
 step2_extraction:
-  implementation: "pipeline.step2_extraction.regex_spacy_extractor.RegexSpacyExtractor"
+  implementation: "pipeline.step2_extraction.transformer_extractor.TransformerExtractor"
   spacy_model: "en_core_web_sm"   # or en_core_web_trf for better accuracy
 
 step3_canonization:

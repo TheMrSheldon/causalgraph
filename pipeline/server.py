@@ -179,7 +179,7 @@ class RelationItem(BaseModel):
     effect_text: str
     cause_canonical: str
     effect_canonical: str
-    is_countercausal: bool
+    relation_type: str
     p_none: float
     p_causal: float
     p_countercausal: float
@@ -324,7 +324,7 @@ def create_app() -> FastAPI:
                 effect_text=rel.effect_text,
                 cause_canonical=cause_canonical,
                 effect_canonical=effect_canonical,
-                is_countercausal=rel.is_countercausal,
+                relation_type=rel.relation_type.value,
                 p_none=rel.p_none,
                 p_causal=rel.p_causal,
                 p_countercausal=rel.p_countercausal,
