@@ -108,7 +108,7 @@ class TransformerExtractor(CausalityExtractor):
                 marked = _mark_entities(title, e0, e1)
 
                 try:
-                    all_scores = self._classifier(marked, top_k=None)[0]
+                    all_scores = self._classifier(marked, top_k=None)
                 except Exception:
                     logger.warning(
                         "TransformerExtractor: classifier failed for post %s pair (%s, %s)",
@@ -125,9 +125,6 @@ class TransformerExtractor(CausalityExtractor):
                     post.id, e0["word"], e1["word"], label,
                     probs.get("procausal", 0.0), probs.get("concausal", 0.0), probs.get("no-rel", 0.0),
                 )
-
-                if rel_type == RelationType.NoRel:
-                    continue
 
                 cause_text = e0["word"].strip()
                 effect_text = e1["word"].strip()
