@@ -237,7 +237,7 @@ function RelationsDisplay({
         <>
           <div className="cluster-section-label" style={{ marginTop: 16 }}>
             Relationships
-            {!filterActive && <span className="analyzer-hover-hint">click for certainty</span>}
+            {!filterActive && <span className="analyzer-hover-hint">click for more information</span>}
             {filterActive && visibleCausal.length > 0 && (
               <span className="analyzer-hover-hint">{visibleCausal.length} of {causal.length}</span>
             )}
@@ -255,7 +255,7 @@ function RelationsDisplay({
         <>
           <div className="cluster-section-label" style={{ marginTop: 12 }}>
             No causal link
-            <span className="analyzer-hover-hint">{visibleNoRel.length} pair{visibleNoRel.length !== 1 ? 's' : ''} · click for certainty</span>
+            <span className="analyzer-hover-hint">{visibleNoRel.length} pair{visibleNoRel.length !== 1 ? 's' : ''} · click for more information</span>
           </div>
           {visibleNoRel.map((r, i) => (
             <RelationRow key={i} rel={r} events={events} selectedIndices={selectedIndices} />

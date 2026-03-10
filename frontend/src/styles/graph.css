@@ -1546,6 +1546,14 @@ html, body, #root {
   background: #dde5ef;
 }
 
+.analyzer-relation--causal.analyzer-relation--expanded:hover {
+  background: #bbf7d0;
+}
+
+.analyzer-relation--countercausal.analyzer-relation--expanded:hover {
+  background: #fecaca;
+}
+
 /* ── No-rel relation rows ────────────────────────────────────────────── */
 
 .analyzer-relation--no-rel {
