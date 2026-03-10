@@ -37,7 +37,7 @@ from pydantic import BaseModel
 
 import importlib
 
-from pipeline.protocols import CausalityDetector, CausalExtractor, EventCanonizer, Post
+from .protocols import CausalityDetector, CausalityExtractor, EventCanonizer, Post
 
 
 def _build(step_cfg: dict, protocol_cls):
@@ -83,7 +83,7 @@ def _get_detector():
 
 @lru_cache(maxsize=1)
 def _get_extractor():
-    return _build(_get_config()["step2_extraction"], CausalExtractor)
+    return _build(_get_config()["step2_extraction"], CausalityExtractor)
 
 
 @lru_cache(maxsize=1)

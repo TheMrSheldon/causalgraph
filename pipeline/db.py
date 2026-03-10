@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
 
-from pipeline.protocols import CausalRelation, EventCluster, Post
+from .protocols import CausalRelation, EventCluster, Post
 
 SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;

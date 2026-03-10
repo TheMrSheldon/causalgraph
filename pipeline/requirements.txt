@@ -14,10 +14,9 @@ hdbscan>=0.8.38
 scikit-learn>=1.5.0
 numpy>=1.26.0
 
-# Step 3: transformer canonizer
+# Step 1,2,3: transformer detector/extractor/canonizer
 transformers>=4.40.0
 
 # Pipeline server
 fastapi>=0.111.0
 uvicorn[standard]>=0.30.0
-httpx>=0.27.0

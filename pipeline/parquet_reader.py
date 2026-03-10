@@ -12,7 +12,7 @@ from typing import Generator
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from pipeline.protocols import Post
+from .protocols import Post
 
 _COLUMNS = ["id", "title", "score", "num_comments", "created_utc", "author", "url", "permalink"]
 

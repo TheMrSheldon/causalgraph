@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from pipeline.protocols import CausalExtractor, CausalRelation, Post
+from ..protocols import CausalityExtractor, CausalRelation, Post
 
 
 def _normalize(text: str) -> str:
@@ -212,9 +212,9 @@ def _label_probs(is_countercausal: bool, source: str) -> dict:
     return {"p_none": 0.15, "p_causal": 0.80, "p_countercausal": 0.05}
 
 
-class RegexSpacyExtractor:
+class RegexSpacyExtractor(CausalityExtractor):
     """
-    Implements CausalExtractor using regex pattern matching with an optional
+    Implements CausalityExtractor using regex pattern matching with an optional
     spaCy dependency parse fallback for higher-quality extraction.
     """
 

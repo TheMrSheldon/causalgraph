@@ -38,7 +38,7 @@ The backend API (`api/`) and the pipeline (`pipeline/`) share **no Python import
 |-----------|----------------|-----------|
 | `ParquetReader` | Stream 867K rows from Parquet in batches | `pipeline/parquet_reader.py` |
 | `CausalityDetector` | Filter titles to those expressing causality | `pipeline/step1_detection/` |
-| `CausalExtractor` | Extract structured (cause, effect) pairs | `pipeline/step2_extraction/` |
+| `CausalityExtractor` | Extract structured (cause, effect) pairs | `pipeline/step2_extraction/` |
 | `EventCanonizer` | Rewrite event spans into self-contained descriptions | `pipeline/step3_canonization/` |
 | `HierarchyInferrer` | Cluster events into multi-level hierarchy | `pipeline/step4_hierarchy/` |
 | `Database` (pipeline) | SQLite DAL — schema, writes, graph queries | `pipeline/db.py` |
@@ -169,7 +169,7 @@ classDiagram
         +name: str
     }
 
-    class CausalExtractor {
+    class CausalityExtractor {
         <<Protocol>>
         +extract(post: Post) list[CausalRelation]
         +name: str
@@ -189,7 +189,7 @@ classDiagram
 
     CausalityDetector <|.. RegexDetector : implements
 
-    CausalExtractor <|.. RegexSpacyExtractor : implements
+    CausalityExtractor <|.. RegexSpacyExtractor : implements
 
     EventCanonizer <|.. PassthroughCanonizer : implements
     EventCanonizer <|.. TransformerCanonizer : implements

@@ -275,31 +275,33 @@ export function PostItem({
         <span className="post-meta">
           ↑ {post.score} · {post.num_comments} comments{date ? ` · ${date}` : ''}
         </span>
-        {onAnalyze && (
+        <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+          {onAnalyze && (
+            <button
+              className="share-btn"
+              onClick={(e) => { e.stopPropagation(); onAnalyze(post.title) }}
+              title="Analyze"
+            >
+              {/* Magnifying-glass icon */}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+            </button>
+          )}
           <button
-            className="share-btn"
-            onClick={(e) => { e.stopPropagation(); onAnalyze(post.title) }}
-            title="Analyze"
+            ref={shareBtnRef}
+            className={`share-btn${shareRect ? ' share-btn--active' : ''}`}
+            onClick={toggleShare}
+            title="Share"
           >
-            {/* Magnifying-glass icon */}
+            {/* Chain-link icon */}
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8"/>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
             </svg>
           </button>
-        )}
-        <button
-          ref={shareBtnRef}
-          className={`share-btn${shareRect ? ' share-btn--active' : ''}`}
-          onClick={toggleShare}
-          title="Share"
-        >
-          {/* Chain-link icon */}
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-          </svg>
-        </button>
+        </div>
       </div>
 
       {shareRect && (

@@ -18,7 +18,7 @@ import yaml
 
 from pipeline.protocols import (
     CausalityDetector,
-    CausalExtractor,
+    CausalityExtractor,
     EventCanonizer,
     HierarchyInferrer,
 )
@@ -83,7 +83,7 @@ def run_step1(
 
 
 def run_step2(
-    extractor: CausalExtractor,
+    extractor: CausalityExtractor,
     db: Database,
 ) -> int:
     """Extract (cause, effect) pairs from causal posts. Returns relation count."""
@@ -263,7 +263,7 @@ def run_all(config_path: str = "pipeline.yaml", step: int | None = None) -> None
         run_step1(detector, reader, db, batch_size)
 
     if step is None or step == 2:
-        extractor = _build(config["step2_extraction"], CausalExtractor)
+        extractor = _build(config["step2_extraction"], CausalityExtractor)
         run_step2(extractor, db)
 
     if step is None or step == 3:

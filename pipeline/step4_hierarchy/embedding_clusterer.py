@@ -16,7 +16,7 @@ from collections import Counter
 
 import numpy as np
 
-from pipeline.protocols import CausalRelation, EventCluster, HierarchyInferrer
+from ..protocols import CausalRelation, EventCluster, HierarchyInferrer
 
 _STOPWORDS = frozenset({
     "a", "an", "the", "of", "in", "to", "and", "or", "for", "with",
@@ -39,7 +39,7 @@ def _label_from_texts(texts: list[str], n_words: int = 3) -> str:
     return " / ".join(top) if top else "unlabeled"
 
 
-class EmbeddingClusterer:
+class EmbeddingClusterer(HierarchyInferrer):
     """
     Implements HierarchyInferrer using sentence-transformer embeddings
     and HDBSCAN hierarchical density clustering.

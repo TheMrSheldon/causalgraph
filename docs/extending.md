@@ -116,7 +116,7 @@ classDiagram
         +name: str
     }
 
-    class CausalExtractor {
+    class CausalityExtractor {
         <<Protocol>>
         +extract(post) list[CausalRelation]
         +name: str

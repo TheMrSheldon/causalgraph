@@ -36,7 +36,7 @@ relations sharing the same key reuse the cached result.
 """
 from __future__ import annotations
 
-from pipeline.protocols import EventCanonizer
+from ..protocols import EventCanonizer
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +92,7 @@ def _clean(output: str, fallback: str) -> str:
 # Canonizer
 # ---------------------------------------------------------------------------
 
-class TransformerCanonizer:
+class TransformerCanonizer(EventCanonizer):
     """
     Implements EventCanonizer using a local instruction-tuned causal LM.
 

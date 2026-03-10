@@ -37,7 +37,7 @@ from collections import Counter
 
 import numpy as np
 
-from pipeline.protocols import CausalRelation, EventCluster, HierarchyInferrer
+from ..protocols import CausalRelation, EventCluster, HierarchyInferrer
 
 
 _STOPWORDS = frozenset({
@@ -60,7 +60,7 @@ def _label_from_texts(texts: list[str], n: int = 3) -> str:
     return " / ".join(top) if top else "unlabeled"
 
 
-class EmbeddingWardClusterer:
+class EmbeddingWardClusterer(HierarchyInferrer):
     """
     Implements HierarchyInferrer using sentence-transformer embeddings and
     scipy Ward linkage with dendrogram cuts at an arbitrary number of levels.

@@ -113,7 +113,7 @@ class CausalityDetector(Protocol):
 # ---------------------------------------------------------------------------
 
 @runtime_checkable
-class CausalExtractor(Protocol):
+class CausalityExtractor(Protocol):
     """
     Given a Post confirmed to express causality, extracts one or more
     (cause, effect) pairs as CausalRelation objects.

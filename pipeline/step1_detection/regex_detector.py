@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-from pipeline.protocols import CausalityDetector, Post
+from ..protocols import CausalityDetector, Post
 
 # ---------------------------------------------------------------------------
 # Pattern groups
@@ -71,7 +71,7 @@ def _is_causal(title: str) -> bool:
     return False
 
 
-class RegexDetector:
+class RegexDetector(CausalityDetector):
     """
     Implements CausalityDetector via compiled regex patterns.
 

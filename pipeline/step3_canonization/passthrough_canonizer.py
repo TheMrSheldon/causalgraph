@@ -11,10 +11,10 @@ LLM canonizer.
 """
 from __future__ import annotations
 
-from pipeline.protocols import EventCanonizer
+from ..protocols import EventCanonizer
 
 
-class PassthroughCanonizer:
+class PassthroughCanonizer(EventCanonizer):
     """
     Implements EventCanonizer by returning text[start:end] for each input span.
     """
