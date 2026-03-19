@@ -407,7 +407,7 @@ def find_enclosing_np(doc, span: Tuple[int, int]):
 
     return min(covering, key=lambda c: c.end_char - c.start_char)
 
-def is_np_modifying_pp(doc, np_span, tok):
+def is_np_modifying_pp(np_span, tok):
     """
     Return True only for NP-internal PPs.
 
