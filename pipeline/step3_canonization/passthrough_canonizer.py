@@ -8,6 +8,44 @@ self-contained headlines where the extracted spans are already standalone
 phrases (e.g., "smoking", "lung cancer risk").  More aggressive canonization
 (e.g., pronoun resolution or title-context enrichment) is provided by the
 LLM canonizer.
+
+[NP completion]
+The majority of causes and effects are presented as noun phrases.
+
+Examples of NP completion:
+(1)
+Sentence:  "Chronic sleep deprivation leads to cognitive decline in the elderly with dementia."
+Span:      "decline"
+→ Canonical: "cognitive decline in the elderly with dementia" (PPs that modify the noun are added)
+(2)
+Sentence:   "Drug used to prevent miscarriage increases risk of cancer in offspring"
+Span:       "Drug"
+-> Canonical: "Drug used to prevent miscarriage" (Participial modifier is added)
+(3)
+Sentence:   "The effects of large group meetings on the spread of COVID-19"
+Span:       "large group meetings"
+-> Canonical: "large groups meetings" ("on the spread of COVID-19" is argument to "effects" not "meetings")
+(4)
+Sentence:   "White America’s racial resentment is the real impetus for welfare cuts, study says"
+Span:       "racial resentment"
+-> Canonical: "White America's racial resentment" (possessive determiner is added)
+
+[Coreference resolution]
+
+cluster detection model (reference): Shon Otmazgin, Arie Cattan, and Yoav Goldberg. 2022. F-coref: Fast, Accurate and Easy to Use Coreference Resolution. In Proceedings of the 2nd Conference of the Asia-Pacific Chapter of the Association for Computational Linguistics and the 12th International Joint Conference on Natural Language Processing: System Demonstrations, pages 48–56, Taipei, Taiwan. Association for Computational Linguistics.
+--- Underlying LM: DistilRoBERTa; avg. CoNLL F1 score = 78.5 which is in line with other systems; 91M params which is substantially smaller and faster
+
+Examples coreference resolution:
+(1)
+Title: 'A person's height impacts their risk of multiple diseases, new study finds'
+Span: 'their risk of multiple diseases'
+Coreference cluster: [(A person's, their)]
+Resolved span: 'A person's risk of multiple diseases'
+(2)
+Title: 'Could Volcanoes Power the World? - If current geothermal wells are replaced with the new technology, it could provide 30% more power than current renewable energy sources.'
+Span: 'it'
+Coreference cluster: [(the new technology, it)]
+Resolved span: 'the new technology'
 """
 from __future__ import annotations
 
