@@ -28,3 +28,12 @@ class PassthroughCanonizer(EventCanonizer):
 
     def canonize(self, spans: list[tuple[str, tuple[int, int]]]) -> list[str]:
         return [text[start:end] for text, (start, end) in spans]
+
+            # ------------------------------------
+            # (2) RUN COREFERENCE RESOLUTION
+            # ------------------------------------
+            coref_resolved_span = _coreference_resolution(text, expanded_start, expanded_end, coref)
+
+            resolved_spans.append(coref_resolved_span)
+
+        return resolved_spans
