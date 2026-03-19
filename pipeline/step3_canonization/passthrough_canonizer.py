@@ -27,7 +27,21 @@ class PassthroughCanonizer(EventCanonizer):
         return "passthrough"
 
     def canonize(self, spans: list[tuple[str, tuple[int, int]]]) -> list[str]:
-        return [text[start:end] for text, (start, end) in spans]
+        #return [text[start:end] for text, (start, end) in spans]
+
+        coref = self._get_coref()
+        nlp = self._get_nlp()
+
+        resolved_spans = []
+
+        for text, (start, end) in spans:
+            # ------------------------------------
+            # (1) RUN NP Expansion
+            # ------------------------------------
+            expanded_np = _noun_phrase_expansion(text, (start, end), nlp)
+
+            expanded_start = text.index(expanded_np)
+            expanded_end = expanded_start + len(expanded_np)
 
             # ------------------------------------
             # (2) RUN COREFERENCE RESOLUTION
