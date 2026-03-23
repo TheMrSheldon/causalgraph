@@ -429,8 +429,8 @@ def is_np_modifying_pp(np_span, tok):
         return False
 
     # 3. ADP must appear INSIDE the NP chunk boundary
-    #    If tok.i >= np_span.end, it belongs to a higher-level NP
-    if tok.i >= np_span.end:
+    #    If tok.i > np_span.end, it belongs to a higher-level NP
+    if tok.i > np_span.end:
         return False
 
     # 4. Ensure the ADP is not governed by an outer NP head.
