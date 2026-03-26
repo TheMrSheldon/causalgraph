@@ -439,6 +439,10 @@ def is_np_modifying_pp(np_span, tok):
     if tok.head.i < np_span.start or tok.head.i >= np_span.end:
         return False
 
+    # 4. Stress test the
+    if not stress_test_modifying_pp(tok, np_span, doc, nlp):
+        return False
+
     return True
 
 
