@@ -394,6 +394,7 @@ def get_np_chunks(doc):
 def find_enclosing_np(doc, span: Tuple[int, int]):
     """
     Find smallest NP containing span
+    Input: parsed doc, span is a tuple representing a text span in character offsets
     """
     s_start, s_end = span
     covering = []
