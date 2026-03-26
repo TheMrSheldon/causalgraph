@@ -500,6 +500,7 @@ def expand_np_with_modifiers(doc, np_span):
         tok = doc[last_token_idx]
 
         # Stop expansion on punctuation, sentence boundary, or conjunction
+        # Why punctuation: comma can introduce non-essential information like non-restrictive relative clauses, e.g., "Felix, who plays the piano, caused ..."
         if tok.is_punct or tok.pos_ == "CCONJ" or tok.sent != np_span.sent:
             break
 
