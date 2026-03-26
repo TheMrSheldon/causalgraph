@@ -414,9 +414,7 @@ def is_np_modifying_pp(np_span, tok):
     Conditions for NP-internal PP:
     1. tok is ADP (a preposition)
     2. tok attaches to the NP head
-    3. tok begins BEFORE the NP-chunk boundary
-       → ensures the PP is *inside* the NP’s own domain
-    4. the PP is not part of a larger NP argument structure:
+    3. the PP is not part of a larger NP argument structure:
        tok must not attach to an ancestor outside np_span
     """
 
