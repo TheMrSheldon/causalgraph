@@ -51,6 +51,7 @@ from __future__ import annotations
 
 from typing import Any, List, Tuple
 from ..protocols import EventCanonizer
+import re
 
 
 Span = Tuple[int, int]  # (start, end) character offsets
