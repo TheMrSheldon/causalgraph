@@ -612,8 +612,6 @@ class PassthroughCanonizer(EventCanonizer):
 
         resolved_spans = []
 
-        print(spans[:10])
-
         for text, (start, end) in spans:
             # ------------------------------------
             # (1) RUN NP Completion
