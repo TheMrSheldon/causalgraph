@@ -473,8 +473,8 @@ def is_restrictive_relcl(np_span, tok):
     - acl   (gerund/participle)
     """
     return (
-        tok.dep_ in ("relcl", "acl", "acl:relcl")
-        and tok.head == np_span.root
+        tok.head.dep_ in ("relcl", "acl", "acl:relcl")
+        and doc[tok.head.i].head == np_span.root
     )
 
 
