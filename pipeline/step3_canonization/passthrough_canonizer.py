@@ -409,7 +409,7 @@ def find_enclosing_np(doc, span: Tuple[int, int]):
     return min(covering, key=lambda c: c.end_char - c.start_char) # return the smallest noun phrase in the document that fully contains a given character span
 
 
-def stress_test_modifying_pp(tok, np_span, doc) -> bool:
+def stress_test_modifying_pp(tok, doc, nlp) -> bool:
     """
     Stress test for modifying PP, where tok.head == np_span.root
     Structures such as "the effects of X on Y", can be wrongly parsed; instable parsing. Wrong attachment of the 'on' preposition of Y on X.
