@@ -415,7 +415,7 @@ def find_enclosing_np(doc, span: Tuple[int, int], text):
         prechunk = text[s_start - 1: partial_covering[0].start_char]
         chunk = text[partial_covering[0].start_char: partial_covering[0].end_char]
         if head_doc[text_doc.index(chunk)].text == prechunk.rstrip():
-            return min(partial_covering, key=lambda c: c.end_char - c.start_char)
+            return partial_covering[0]
         return None
 
     return min(covering, key=lambda c: c.end_char - c.start_char) # return the smallest noun phrase in the document that fully contains a given character span
