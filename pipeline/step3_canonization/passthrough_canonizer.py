@@ -504,7 +504,7 @@ def expand_np_with_modifiers(doc, np_span):
             break
 
         # Case 1: PP modifier
-        if is_np_modifying_pp(np_span, tok):
+        if is_np_modifying_pp(np_span, tok, doc, nlp):
             pp_end = tok.i
             for t in tok.subtree:
                 pp_end = max(pp_end, t.i)
