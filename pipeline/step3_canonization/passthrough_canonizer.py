@@ -485,7 +485,7 @@ def expand_possessive_determiner(doc, np_span):
     return doc[new_start:new_end]
 
 
-def expand_np_with_modifiers(doc, np_span):
+def expand_np_with_modifiers(doc, np_span, nlp) -> str:
     """
     Expand NP to include modifying clauses (PP, relcl, acl)
     1. Prepositional phrases (PP)
