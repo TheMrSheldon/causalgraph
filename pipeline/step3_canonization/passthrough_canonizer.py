@@ -412,7 +412,7 @@ def find_enclosing_np(doc, span: Tuple[int, int], text):
     if not covering and partial_covering:
         text_doc = [t.text for t in doc]
         head_doc = [t.head for t in doc]
-        prechunk = text[s_start - 1: partial_covering[0].start_char]
+        prechunk = text[s_start: partial_covering[0].start_char]
         chunk = text[partial_covering[0].start_char: partial_covering[0].end_char]
         if head_doc[text_doc.index(chunk)].text == prechunk.rstrip():
             return partial_covering[0]
