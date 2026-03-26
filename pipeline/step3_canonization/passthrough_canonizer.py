@@ -539,6 +539,7 @@ def _noun_phrase_expansion(text: str, span: Tuple[int, int], nlp) -> str:
         return selected
 
     # expand NP to include possessive determiners
+    # Normally, possessive determiners are included in the NP chunker, but in case it is not, this function includes them
     np_chunk = expand_possessive_determiner(doc, np_chunk)
 
     return expand_np_with_modifiers(doc, np_chunk, nlp)
