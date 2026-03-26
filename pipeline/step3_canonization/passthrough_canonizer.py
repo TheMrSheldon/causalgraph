@@ -537,7 +537,7 @@ def expand_np_with_modifiers(doc, np_span, nlp) -> str:
             continue
 
         # Case 2: Restrictive Relative Clause / Gerund (acl, relcl)
-        if is_restrictive_relcl(np_span, tok):
+        if is_restrictive_relcl(np_span, tok, doc):
             cl_end = tok.i
             for t in np_span.subtree:
                 cl_end = max(cl_end, t.i)
