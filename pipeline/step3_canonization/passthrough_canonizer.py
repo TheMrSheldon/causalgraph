@@ -541,7 +541,7 @@ def _noun_phrase_expansion(text: str, span: Tuple[int, int], nlp) -> str:
     # expand NP to include possessive determiners
     np_chunk = expand_possessive_determiner(doc, np_chunk)
 
-    return expand_np_with_modifiers(doc, np_chunk)
+    return expand_np_with_modifiers(doc, np_chunk, nlp)
 
 
 class PassthroughCanonizer(EventCanonizer):
