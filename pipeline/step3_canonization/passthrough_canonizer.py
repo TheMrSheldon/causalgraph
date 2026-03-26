@@ -618,7 +618,7 @@ class PassthroughCanonizer(EventCanonizer):
             # ------------------------------------
             # (1) RUN NP Completion
             # ------------------------------------
-            expanded_np = _noun_phrase_expansion(text, (start, end), nlp)
+            expanded_np = _noun_phrase_completion(text, (start, end), nlp)
 
             expanded_start = text.index(expanded_np)
             expanded_end = expanded_start + len(expanded_np)
