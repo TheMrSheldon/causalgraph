@@ -488,9 +488,9 @@ def expand_possessive_determiner(doc, np_span):
 def expand_np_with_modifiers(doc, np_span):
     """
     Expand NP to include modifying clauses (PP, relcl, acl)
-    1. Prepositional phrases
-    2. Restrictive relative clauses
-    3. Gerund/participle modifiers
+    1. Prepositional phrases (PP)
+    2. Restrictive relative clauses (relcl)
+    3. Gerund/participle modifiers (acl)
     """
     expanded_end = np_span.end_char
     last_token_idx = np_span.end
