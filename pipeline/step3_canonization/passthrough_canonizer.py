@@ -528,7 +528,7 @@ def expand_np_with_modifiers(doc, np_span):
 
 def _noun_phrase_expansion(text: str, span: Tuple[int, int], nlp) -> str:
     """
-    Main function for NP resolution
+    Main function for NP expansion
     """
     doc = nlp(text)
     s_start, s_end = span
