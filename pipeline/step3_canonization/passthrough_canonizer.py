@@ -27,7 +27,7 @@ Span:       "large group meetings"
 -> Canonical: "large groups meetings" ("on the spread of COVID-19" is argument to "effects" not "meetings")
 (4)
 Sentence:   "White America’s racial resentment is the real impetus for welfare cuts, study says"
-Span:       "racial resentment"
+Span:       "White America" or "racial resentment"
 -> Canonical: "White America's racial resentment" (possessive determiner is added)
 
 [Coreference resolution]
