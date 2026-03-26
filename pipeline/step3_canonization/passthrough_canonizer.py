@@ -465,7 +465,7 @@ def is_np_modifying_pp(np_span, tok, doc, nlp) -> bool:
     return True
 
 
-def is_restrictive_relcl(np_span, tok):
+def is_restrictive_relcl(np_span, tok, doc):
     """
     Restrictive relative clause tokens typically have dep labels:
     - relcl
