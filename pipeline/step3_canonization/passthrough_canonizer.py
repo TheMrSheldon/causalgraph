@@ -526,7 +526,7 @@ def expand_np_with_modifiers(doc, np_span):
     return doc.text[np_span.start_char : expanded_end]
 
 
-def _noun_phrase_expansion(text: str, span: Tuple[int, int], nlp) -> str:
+def _noun_phrase_completion(text: str, span: Tuple[int, int], nlp) -> str:
     """
     Main function for NP expansion
     """
