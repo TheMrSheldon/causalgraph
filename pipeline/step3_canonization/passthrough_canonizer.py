@@ -459,7 +459,7 @@ def is_np_modifying_pp(np_span, tok, doc, nlp) -> bool:
         return False
 
     # 4. Stress test the
-    if not stress_test_modifying_pp(tok, np_span, doc, nlp):
+    if not stress_test_modifying_pp(tok, doc, nlp):
         return False
 
     return True
