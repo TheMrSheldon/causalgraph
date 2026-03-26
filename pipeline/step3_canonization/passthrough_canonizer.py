@@ -391,7 +391,7 @@ def get_np_chunks(doc):
         return fallback_np_detector(doc)
 
 
-def find_enclosing_np(doc, span: Tuple[int, int]):
+def find_enclosing_np(doc, span: Tuple[int, int], text):
     """
     Find smallest NP containing span
     Input: parsed doc, span is a tuple representing a text span in character offsets
