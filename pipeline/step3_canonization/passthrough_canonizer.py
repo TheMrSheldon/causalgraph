@@ -539,7 +539,7 @@ def expand_np_with_modifiers(doc, np_span, nlp) -> str:
         # Case 2: Restrictive Relative Clause / Gerund (acl, relcl)
         if is_restrictive_relcl(np_span, tok):
             cl_end = tok.i
-            for t in tok.subtree:
+            for t in np_span.subtree:
                 cl_end = max(cl_end, t.i)
             expanded_end = doc[cl_end].idx + len(doc[cl_end])
             last_token_idx = cl_end + 1
