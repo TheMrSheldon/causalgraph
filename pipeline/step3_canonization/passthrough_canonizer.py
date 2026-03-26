@@ -405,7 +405,29 @@ def find_enclosing_np(doc, span: Tuple[int, int]):
     if not covering:
         return None
 
-    return min(covering, key=lambda c: c.end_char - c.start_char)
+    return min(covering, key=lambda c: c.end_char - c.start_char) # return the smallest noun phrase in the document that fully contains a given character span
+
+
+def stress_test_modifying_pp(tok, np_span, doc) -> bool:
+    """
+    Stress test for modifying PP, where tok.head == np_span.root
+    Structures such as "the effects of X on Y", can be wrongly parsed; instable parsing. Wrong attachment of the 'on' preposition of Y on X.
+    Attachment namely changes when adding another PP after Y. Example: the effects of Y in Chile on X". Now, correct attachment of 'on' on 'effects'
+    If stress test results in tok.head != np_span.root, than PP is not modifying NP in a stable manner.
+    """
+    if tok.text != "in":
+        added_list = ['in', 'Chile']
+    else:
+        added_list = ['in', 'Chile']
+    expanded_doc = [t.text for t in doc[:tok.head.i+1]] + added_list + [t.text for t in doc[tok.head.i+1:]]
+
+    new_doc = nlp(" ".join(expanded_doc))
+    new_np_span = list(new_doc.noun_chunks)[1]
+    new_tok = new_doc[tok.head.i+3]
+
+    # ADP is no longer attached to the NP head, indicating instable attachment
+    if new_tok.head != new_np_span.root:
+        return False
 
     return True
 
