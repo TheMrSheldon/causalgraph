@@ -536,7 +536,7 @@ def _noun_phrase_expansion(text: str, span: Tuple[int, int], nlp) -> str:
 
     np_chunk = find_enclosing_np(doc, span)
     if np_chunk is None:
-        return selected
+        return selected # return original span if it is not part of a noun phrase
 
     # expand NP to include possessive determiners
     # Normally, possessive determiners are included in the NP chunker, but in case it is not, this function includes them
