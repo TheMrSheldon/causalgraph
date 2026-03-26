@@ -455,7 +455,7 @@ def is_restrictive_relcl(np_span, tok):
     )
 
 
-def expand_possessive_determiner(doc, np_span):
+def expand_possessive_determiner(doc, np_span) -> str:
     """
     Expand NP leftwards to include possessive determiners such as:
     "White America's racial resentment"
