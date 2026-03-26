@@ -399,7 +399,7 @@ def find_enclosing_np(doc, span: Tuple[int, int]):
     s_start, s_end = span
     covering = []
 
-    for chunk in get_np_chunks(doc):
+    for chunk in get_np_chunks(doc): # collect all noun phrases that fully enclose the given text span
         if chunk.start_char <= s_start and s_end <= chunk.end_char:
             covering.append(chunk)
 
