@@ -576,6 +576,7 @@ def _noun_phrase_completion(text: str, span: Tuple[int, int], nlp) -> str:
     s_start, s_end = span
     selected = text[s_start:s_end]
 
+    # Canonization step 1: Find enclosing NPs
     np_chunk = find_enclosing_np(doc, span, text)
     if np_chunk is None:
         return selected # return original span if it is not part of a noun phrase
