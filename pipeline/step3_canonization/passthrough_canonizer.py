@@ -121,9 +121,6 @@ def find_enclosing_np(doc, span: Tuple[int, int], text):
     Canonical span: inflammation
      """
     s_start, s_end = span
-    covering = []
-    partial_covering = []
-
     # Lists to store NPs that fully or partially cover the span
     covering = []  # NPs that fully enclose the span
     partial_covering = []  # NPs that end exactly at the span boundary
