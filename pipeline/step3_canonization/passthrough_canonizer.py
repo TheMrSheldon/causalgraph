@@ -651,7 +651,6 @@ class PassthroughCanonizer(EventCanonizer):
     def canonize(self, spans: list[tuple[str, tuple[int, int]]]) -> list[str]:
         #return [text[start:end] for text, (start, end) in spans]
 
-        coref = self._get_coref()
         nlp = self._get_nlp()
 
         resolved_spans = []
