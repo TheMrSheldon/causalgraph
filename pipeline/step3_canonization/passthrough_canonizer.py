@@ -580,7 +580,7 @@ def _noun_phrase_completion(text: str, span: Tuple[int, int], nlp) -> str:
     if np_chunk is None:
         return selected # return original span if it is not part of a noun phrase
 
-    # expand NP to include possessive determiners
+    # Canonization step 2: expand NP to include possessive determiners (leftward expansion)
     # Normally, possessive determiners are included in the NP chunker, but in case it is not, this function includes them
     np_chunk = expand_possessive_determiner(doc, np_chunk)
 
