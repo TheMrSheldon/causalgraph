@@ -660,15 +660,6 @@ class PassthroughCanonizer(EventCanonizer):
             # (1) RUN NP Completion
             # ------------------------------------
             expanded_np = _noun_phrase_completion(text, (start, end), nlp)
-
-            expanded_start = text.index(expanded_np)
-            expanded_end = expanded_start + len(expanded_np)
-
-            # ------------------------------------
-            # (2) RUN COREFERENCE RESOLUTION
-            # ------------------------------------
-            coref_resolved_span = _coreference_resolution(text, expanded_start, expanded_end, coref)
-
-            resolved_spans.append(coref_resolved_span)
+            resolved_spans.append(expanded_np)
 
         return resolved_spans
