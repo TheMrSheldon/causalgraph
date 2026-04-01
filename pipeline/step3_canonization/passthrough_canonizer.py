@@ -404,6 +404,8 @@ def find_enclosing_np(doc, span: Tuple[int, int], text):
     for chunk in get_np_chunks(doc): # collect all noun phrases that fully enclose the given text span
         if chunk.start_char <= s_start and s_end <= chunk.end_char:
             covering.append(chunk)
+        # collect all noun phrases that partially enclose the given text span, with additional text before the NP chunk
+        # e.g., "triggers inflammation" --> "inflammation" as NP chunk
         elif s_start <= chunk.start_char and s_end == chunk.end_char:
             partial_covering.append(chunk)
 
