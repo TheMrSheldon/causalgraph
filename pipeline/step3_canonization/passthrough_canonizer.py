@@ -394,9 +394,29 @@ def get_np_chunks(doc):
 
 def find_enclosing_np(doc, span: Tuple[int, int], text):
     """
-    Find smallest NP containing span
-    Input: parsed doc, span is a tuple representing a text span in character offsets
-    """
+     Find the smallest noun phrase (NP) containing a given character span.
+
+     Parameters
+     ----------
+     doc : spaCy Doc
+         The parsed document.
+     span : (int, int)
+         A tuple (start_char, end_char) representing the character offsets
+         of the target span inside the full text.
+     text : str
+         The full original text (needed for substring extraction).
+
+     Returns
+     -------
+     span or None
+         The smallest NP fully enclosing the span, a partially covering NP
+         from which introductory verb is removed (A), or None if nothing matches.
+
+    A:
+    Sentence: Air pollution causes respiratory problems and triggers inflammation.
+    Extracted span: triggers inflammation
+    Canonical span: inflammation
+     """
     s_start, s_end = span
     covering = []
     partial_covering = []
