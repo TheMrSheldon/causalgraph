@@ -407,6 +407,7 @@ def find_enclosing_np(doc, span: Tuple[int, int], text):
         elif s_start <= chunk.start_char and s_end == chunk.end_char:
             partial_covering.append(chunk)
 
+    # If there is no NP that fully or partially covers: return None
     if not covering and not partial_covering:
         return None
 
