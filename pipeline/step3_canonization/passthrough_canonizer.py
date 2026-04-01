@@ -410,6 +410,10 @@ def find_enclosing_np(doc, span: Tuple[int, int], text):
     if not covering and not partial_covering:
         return None
 
+    # If we have no fully covering NP but at least one partial match,
+    # apply a heuristic to see whether it should count as an enclosing NP.
+    # Heuristic: flag whether a token inside the partial NP has a head matching the preceding text,
+    # which suggests linguistic attachment
     if not covering and partial_covering:
         text_doc = [t.text for t in doc]
         head_doc = [t.head for t in doc]
