@@ -401,7 +401,12 @@ def find_enclosing_np(doc, span: Tuple[int, int], text):
     covering = []
     partial_covering = []
 
-    for chunk in get_np_chunks(doc): # collect all noun phrases that fully enclose the given text span
+    # Lists to store NPs that fully or partially cover the span
+    covering = []  # NPs that fully enclose the span
+    partial_covering = []  # NPs that end exactly at the span boundary
+
+    for chunk in get_np_chunks(doc):
+        # collect all noun phrases that fully enclose the given text span
         if chunk.start_char <= s_start and s_end <= chunk.end_char:
             covering.append(chunk)
         # collect all noun phrases that partially enclose the given text span, with additional text before the NP chunk
