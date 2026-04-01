@@ -417,6 +417,9 @@ def find_enclosing_np(doc, span: Tuple[int, int], text):
         chunk = text[partial_covering[0].start_char: partial_covering[0].end_char]
         checker = False
         for token in re.split(r"[ -]+", chunk):
+            # If token exists in the doc and its syntactic head matches the prechunk,
+            # treat the NP as a valid enclosing phrase
+            # example: "triggers inflammation". prechunk = "triggers", head of "inflammation" = "triggers"
             if head_doc[text_doc.index(token)].text == prechunk.rstrip():
                 checker = True
                 break
