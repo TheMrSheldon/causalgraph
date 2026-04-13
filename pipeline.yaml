@@ -12,7 +12,7 @@ step2_extraction:
   spacy_model: "en_core_web_sm"   # or en_core_web_trf for better accuracy
 
 step3_canonization:
-  implementation: "pipeline.step3_canonization.passthrough_canonizer.PassthroughCanonizer"
+  implementation: "pipeline.step3_canonization.parsing_canonizer.ParsingCanonizer"
 
   # TransformerCanonizer options
   # Default: Qwen2.5-1.5B-Instruct (~3 GB RAM on CPU)
