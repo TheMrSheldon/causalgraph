@@ -7,6 +7,7 @@ that the pipeline writes; the expected schema is documented in docs/graphformat.
 from __future__ import annotations
 
 import sqlite3
+import time
 from contextlib import contextmanager
 from typing import Generator
 
@@ -14,8 +15,19 @@ from typing import Generator
 class GraphDatabase:
     """Read-only view of a pipeline-produced SQLite database."""
 
+    _CACHE_TTL = 300  # seconds
+
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
+        self._cache: dict[str, tuple[float, object]] = {}
+
+    def _cached(self, key: str, fn):
+        entry = self._cache.get(key)
+        if entry and time.time() - entry[0] < self._CACHE_TTL:
+            return entry[1]
+        result = fn()
+        self._cache[key] = (time.time(), result)
+        return result
 
     @contextmanager
     def _connect(self) -> Generator[sqlite3.Connection, None, None]:
@@ -30,26 +42,45 @@ class GraphDatabase:
     # Cluster hierarchy
     # ------------------------------------------------------------------
 
+    _CLUSTER_COLS = """
+        c.id, c.label, c.level, c.parent_id, c.member_count,
+        EXISTS(SELECT 1 FROM clusters c2 WHERE c2.parent_id = c.id) AS has_children
+    """
+
+    def get_root_clusters(self) -> list[dict]:
+        def _query():
+            sql = f"""
+                SELECT {self._CLUSTER_COLS}
+                FROM clusters c WHERE c.parent_id IS NULL
+                ORDER BY c.member_count DESC
+            """
+            with self._connect() as conn:
+                return [dict(r) for r in conn.execute(sql).fetchall()]
+        return self._cached("root_clusters", _query)
+
     def get_clusters_at_level(self, level: int) -> list[dict]:
-        sql = """
-            SELECT id, label, level, parent_id, member_count
-            FROM clusters WHERE level = ?
-            ORDER BY member_count DESC
+        sql = f"""
+            SELECT {self._CLUSTER_COLS}
+            FROM clusters c WHERE c.level = ?
+            ORDER BY c.member_count DESC
         """
         with self._connect() as conn:
             return [dict(r) for r in conn.execute(sql, (level,)).fetchall()]
 
     def get_cluster_by_id(self, cluster_id: int) -> dict | None:
-        sql = "SELECT id, label, level, parent_id, member_count FROM clusters WHERE id = ?"
+        sql = f"""
+            SELECT {self._CLUSTER_COLS}
+            FROM clusters c WHERE c.id = ?
+        """
         with self._connect() as conn:
             row = conn.execute(sql, (cluster_id,)).fetchone()
             return dict(row) if row else None
 
     def get_children(self, cluster_id: int) -> list[dict]:
-        sql = """
-            SELECT id, label, level, parent_id, member_count
-            FROM clusters WHERE parent_id = ?
-            ORDER BY member_count DESC
+        sql = f"""
+            SELECT {self._CLUSTER_COLS}
+            FROM clusters c WHERE c.parent_id = ?
+            ORDER BY c.member_count DESC
         """
         with self._connect() as conn:
             return [dict(r) for r in conn.execute(sql, (cluster_id,)).fetchall()]
@@ -61,89 +92,105 @@ class GraphDatabase:
         return {r["level"]: r["cnt"] for r in rows}
 
     def get_top_events_for_cluster(self, cluster_id: int, n: int = 10) -> list[str]:
-        sql = """
-            SELECT event_text, COUNT(*) AS cnt
-            FROM cluster_members WHERE cluster_id = ?
-            GROUP BY event_text ORDER BY cnt DESC LIMIT ?
-        """
         with self._connect() as conn:
-            return [r["event_text"] for r in conn.execute(sql, (cluster_id, n)).fetchall()]
+            leaf_ids = self._get_leaf_cluster_ids(conn, cluster_id)
+            if not leaf_ids:
+                return []
+            ph = ",".join("?" * len(leaf_ids))
+            sql = f"""
+                SELECT event_text, COUNT(*) AS cnt
+                FROM cluster_members WHERE cluster_id IN ({ph})
+                GROUP BY event_text ORDER BY cnt DESC LIMIT ?
+            """
+            return [r["event_text"] for r in conn.execute(sql, leaf_ids + [n]).fetchall()]
 
     # ------------------------------------------------------------------
     # Edges
     # ------------------------------------------------------------------
 
-    def _get_descendant_leaf_ids(self, conn: sqlite3.Connection, ancestor_ids: list[int]) -> dict[int, int]:
-        """Return {leaf_cluster_id: ancestor_id} for all descendants of the given IDs."""
-        all_clusters = conn.execute("SELECT id, parent_id FROM clusters").fetchall()
-        parent_of: dict[int, int | None] = {r[0]: r[1] for r in all_clusters}
-        ancestor_set = set(ancestor_ids)
-        leaf_to_ancestor: dict[int, int] = {}
-        for cid in parent_of:
-            cur: int | None = cid
-            visited: set[int] = set()
-            while cur is not None:
-                if cur in visited:
-                    break
-                visited.add(cur)
-                if cur in ancestor_set:
-                    leaf_to_ancestor[cid] = cur
-                    break
-                cur = parent_of.get(cur)
-        return leaf_to_ancestor
+    def _get_leaf_cluster_ids(self, conn: sqlite3.Connection, cluster_id: int) -> list[int]:
+        """Return all level-0 leaf cluster IDs that are descendants of cluster_id (or itself if leaf)."""
+        rows = conn.execute(
+            """
+            WITH RECURSIVE desc(id) AS (
+                SELECT ? UNION ALL
+                SELECT c.id FROM clusters c JOIN desc d ON c.parent_id = d.id
+            )
+            SELECT id FROM clusters WHERE id IN (SELECT id FROM desc) AND level = 0
+            """,
+            (cluster_id,),
+        ).fetchall()
+        return [r[0] for r in rows]
 
     def get_edges(self, cluster_ids: list[int] | None = None, min_post_count: int = 1) -> list[dict]:
-        with self._connect() as conn:
-            if cluster_ids is None:
+        cache_key = f"edges:{','.join(map(str, sorted(cluster_ids) if cluster_ids else []))}:{min_post_count}"
+
+        def _query():
+            with self._connect() as conn:
+                if cluster_ids is None:
+                    rows = conn.execute(
+                        """SELECT source_cluster_id, target_cluster_id, relation_count,
+                                  post_count, avg_score, countercausal_count
+                           FROM leaf_edges WHERE post_count >= ?""",
+                        [min_post_count],
+                    ).fetchall()
+                    return [dict(r) for r in rows]
+
+                if not cluster_ids:
+                    return []
+
+                ph = ",".join("?" * len(cluster_ids))
+
+                # Use precomputed expand_edges when available (fast indexed lookup).
+                # Falls back to the recursive CTE only when expand_edges is empty
+                # (e.g. right after schema migration before rebuild_expand_edges is run).
+                has_precomputed = conn.execute(
+                    "SELECT 1 FROM expand_edges LIMIT 1"
+                ).fetchone()
+
+                if has_precomputed:
+                    rows = conn.execute(
+                        f"""SELECT source_cluster_id, target_cluster_id,
+                                   relation_count, post_count, avg_score, countercausal_count
+                            FROM expand_edges
+                            WHERE source_cluster_id IN ({ph})
+                              AND target_cluster_id IN ({ph})
+                              AND post_count >= ?""",
+                        cluster_ids + cluster_ids + [min_post_count],
+                    ).fetchall()
+                    return [dict(r) for r in rows]
+
+                # Fallback: recursive CTE (used before first rebuild_expand_edges run)
                 rows = conn.execute(
-                    """SELECT source_cluster_id, target_cluster_id, relation_count,
-                              post_count, avg_score, countercausal_count
-                       FROM leaf_edges WHERE post_count >= ?""",
-                    [min_post_count],
+                    f"""
+                    WITH RECURSIVE desc(id, ancestor_id) AS (
+                        SELECT id, id FROM clusters WHERE id IN ({ph})
+                        UNION ALL
+                        SELECT c.id, d.ancestor_id FROM clusters c JOIN desc d ON c.parent_id = d.id
+                    ),
+                    leaf_map(leaf_id, ancestor_id) AS (
+                        SELECT d.id, d.ancestor_id FROM desc d JOIN clusters c ON c.id = d.id
+                        WHERE c.level = 0
+                    )
+                    SELECT
+                        src.ancestor_id AS source_cluster_id,
+                        tgt.ancestor_id AS target_cluster_id,
+                        SUM(le.relation_count)    AS relation_count,
+                        SUM(le.post_count)        AS post_count,
+                        SUM(le.avg_score * le.post_count) / SUM(le.post_count) AS avg_score,
+                        SUM(le.countercausal_count) AS countercausal_count
+                    FROM leaf_edges le
+                    JOIN leaf_map src ON src.leaf_id = le.source_cluster_id
+                    JOIN leaf_map tgt ON tgt.leaf_id = le.target_cluster_id
+                    WHERE src.ancestor_id != tgt.ancestor_id
+                    GROUP BY src.ancestor_id, tgt.ancestor_id
+                    HAVING SUM(le.post_count) >= ?
+                    """,
+                    cluster_ids + [min_post_count],
                 ).fetchall()
                 return [dict(r) for r in rows]
 
-            leaf_to_ancestor = self._get_descendant_leaf_ids(conn, cluster_ids)
-            if not leaf_to_ancestor:
-                return []
-
-            leaf_ids = list(leaf_to_ancestor.keys())
-            ph = ",".join("?" * len(leaf_ids))
-            rows = conn.execute(
-                f"""SELECT source_cluster_id, target_cluster_id, relation_count,
-                           post_count, avg_score, countercausal_count
-                    FROM leaf_edges
-                    WHERE source_cluster_id IN ({ph}) AND target_cluster_id IN ({ph})""",
-                leaf_ids + leaf_ids,
-            ).fetchall()
-
-            agg: dict[tuple[int, int], dict] = {}
-            for r in rows:
-                src = leaf_to_ancestor.get(r["source_cluster_id"])
-                tgt = leaf_to_ancestor.get(r["target_cluster_id"])
-                if src is None or tgt is None or src == tgt:
-                    continue
-                key = (src, tgt)
-                if key not in agg:
-                    agg[key] = {"source_cluster_id": src, "target_cluster_id": tgt,
-                                "relation_count": 0, "post_count": 0,
-                                "avg_score_sum": 0.0, "n": 0, "countercausal_count": 0}
-                agg[key]["relation_count"] += r["relation_count"]
-                agg[key]["post_count"] += r["post_count"]
-                agg[key]["avg_score_sum"] += (r["avg_score"] or 0.0) * r["post_count"]
-                agg[key]["n"] += r["post_count"]
-                agg[key]["countercausal_count"] += r["countercausal_count"]
-
-            return [
-                {"source_cluster_id": v["source_cluster_id"],
-                 "target_cluster_id": v["target_cluster_id"],
-                 "relation_count": v["relation_count"],
-                 "post_count": v["post_count"],
-                 "avg_score": v["avg_score_sum"] / v["n"] if v["n"] > 0 else 0.0,
-                 "countercausal_count": v["countercausal_count"]}
-                for v in agg.values()
-                if v["post_count"] >= min_post_count
-            ]
+        return self._cached(cache_key, _query)
 
     # ------------------------------------------------------------------
     # Posts
@@ -156,31 +203,47 @@ class GraphDatabase:
         offset: int = 0,
         sort: str = "score",
     ) -> tuple[list[dict], int]:
-        sort_col = {"score": "p.score", "date": "p.created_utc", "comments": "p.num_comments"}.get(
-            sort, "p.score"
-        )
-        sql = f"""
-            SELECT p.id, p.title, p.score, p.num_comments, p.created_utc, p.permalink,
-                   cr.cause_text, cr.effect_text, cr.is_countercausal
-            FROM posts p
-            JOIN (
-                SELECT cr2.post_id, MIN(cr2.id) AS min_cr_id
-                FROM causal_relations cr2
-                JOIN cluster_members cm2 ON cm2.relation_id = cr2.id
-                WHERE cm2.cluster_id = ?
-                GROUP BY cr2.post_id
-            ) best ON best.post_id = p.id
-            JOIN causal_relations cr ON cr.id = best.min_cr_id
-            ORDER BY {sort_col} DESC
-            LIMIT ? OFFSET ?
-        """
-        count_sql = """
-            SELECT COUNT(DISTINCT p.id) FROM posts p
-            JOIN causal_relations cr ON cr.post_id = p.id
-            JOIN cluster_members cm ON cm.relation_id = cr.id
-            WHERE cm.cluster_id = ?
-        """
+        _SORT_COLS = {"score": "p.score", "date": "p.created_utc", "comments": "p.num_comments"}
+        sort_col = _SORT_COLS.get(sort, "p.score")
+        assert sort_col in _SORT_COLS.values(), f"invalid sort: {sort!r}"
+
         with self._connect() as conn:
+            sql = f"""
+                WITH RECURSIVE desc(id) AS (
+                    SELECT ? UNION ALL
+                    SELECT c.id FROM clusters c JOIN desc d ON c.parent_id = d.id
+                ),
+                leaves(cluster_id) AS (
+                    SELECT id FROM clusters WHERE id IN (SELECT id FROM desc) AND level = 0
+                )
+                SELECT p.id, p.title, p.score, p.num_comments, p.created_utc, p.permalink,
+                       cr.cause_text, cr.effect_text,
+                       (cr.relation_type = 'countercausal') AS is_countercausal
+                FROM posts p
+                JOIN (
+                    SELECT cr2.post_id, MIN(cr2.id) AS min_cr_id
+                    FROM causal_relations cr2
+                    JOIN cluster_members cm2 ON cm2.relation_id = cr2.id
+                    JOIN leaves ON leaves.cluster_id = cm2.cluster_id
+                    GROUP BY cr2.post_id
+                ) best ON best.post_id = p.id
+                JOIN causal_relations cr ON cr.id = best.min_cr_id
+                ORDER BY {sort_col} DESC
+                LIMIT ? OFFSET ?
+            """
+            count_sql = """
+                WITH RECURSIVE desc(id) AS (
+                    SELECT ? UNION ALL
+                    SELECT c.id FROM clusters c JOIN desc d ON c.parent_id = d.id
+                ),
+                leaves(cluster_id) AS (
+                    SELECT id FROM clusters WHERE id IN (SELECT id FROM desc) AND level = 0
+                )
+                SELECT COUNT(DISTINCT p.id) FROM posts p
+                JOIN causal_relations cr ON cr.post_id = p.id
+                JOIN cluster_members cm ON cm.relation_id = cr.id
+                JOIN leaves ON leaves.cluster_id = cm.cluster_id
+            """
             total = conn.execute(count_sql, (cluster_id,)).fetchone()[0]
             rows = [dict(r) for r in conn.execute(sql, (cluster_id, limit, offset)).fetchall()]
         return rows, total
@@ -193,9 +256,8 @@ class GraphDatabase:
         offset: int = 0,
     ) -> tuple[list[dict], int]:
         with self._connect() as conn:
-            leaf_map = self._get_descendant_leaf_ids(conn, [source_cluster_id, target_cluster_id])
-            src_leaves = [cid for cid, anc in leaf_map.items() if anc == source_cluster_id] or [source_cluster_id]
-            tgt_leaves = [cid for cid, anc in leaf_map.items() if anc == target_cluster_id] or [target_cluster_id]
+            src_leaves = self._get_leaf_cluster_ids(conn, source_cluster_id) or [source_cluster_id]
+            tgt_leaves = self._get_leaf_cluster_ids(conn, target_cluster_id) or [target_cluster_id]
 
             src_ph = ",".join("?" * len(src_leaves))
             tgt_ph = ",".join("?" * len(tgt_leaves))
@@ -203,7 +265,8 @@ class GraphDatabase:
 
             sql = f"""
                 SELECT p.id, p.title, p.score, p.num_comments, p.created_utc, p.permalink,
-                       cr.cause_text, cr.effect_text, cr.is_countercausal
+                       cr.cause_text, cr.effect_text,
+                       (cr.relation_type = 'countercausal') AS is_countercausal
                 FROM posts p
                 JOIN (
                     SELECT cr2.post_id, MIN(cr2.id) AS min_cr_id
@@ -248,7 +311,7 @@ class GraphDatabase:
                 cr.post_id,
                 cr.cause_text, cr.effect_text,
                 cr.cause_canonical, cr.effect_canonical,
-                cr.is_countercausal,
+                (cr.relation_type = 'countercausal') AS is_countercausal,
                 cm_cause.cluster_id  AS cause_cluster_id,
                 cm_effect.cluster_id AS effect_cluster_id
             FROM causal_relations cr
@@ -269,7 +332,8 @@ class GraphDatabase:
     def get_post_by_id(self, post_id: str) -> dict | None:
         sql = """
             SELECT p.id, p.title, p.score, p.num_comments, p.created_utc, p.permalink,
-                   cr.cause_text, cr.effect_text, cr.confidence, cr.is_countercausal
+                   cr.cause_text, cr.effect_text, cr.confidence,
+                   (cr.relation_type = 'countercausal') AS is_countercausal
             FROM posts p
             LEFT JOIN causal_relations cr ON cr.post_id = p.id
             WHERE p.id = ?

@@ -117,10 +117,10 @@ pipelineHttp.interceptors.request.use((config) => {
 })
 
 export const api = {
-  getGraph: async (level = 2, minPostCount = 1): Promise<GraphData> => {
-    const { data } = await http.get<GraphData>('/graph', {
-      params: { level, min_post_count: minPostCount },
-    })
+  getGraph: async (level?: number, minPostCount = 1): Promise<GraphData> => {
+    const params: Record<string, unknown> = { min_post_count: minPostCount }
+    if (level !== undefined) params.level = level
+    const { data } = await http.get<GraphData>('/graph', { params })
     return data
   },
 
@@ -134,10 +134,10 @@ export const api = {
     return data
   },
 
-  expandCluster: async (id: number, contextIds: number[] = []): Promise<GraphData> => {
-    const { data } = await http.get<GraphData>(`/clusters/${id}/expand`, {
-      params: contextIds.length ? { context_ids: contextIds.join(',') } : undefined,
-    })
+  expandCluster: async (id: number, contextIds: number[] = [], minPostCount = 1): Promise<GraphData> => {
+    const params: Record<string, unknown> = { min_post_count: minPostCount }
+    if (contextIds.length) params.context_ids = contextIds.join(',')
+    const { data } = await http.get<GraphData>(`/clusters/${id}/expand`, { params })
     return data
   },
 

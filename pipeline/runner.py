@@ -85,6 +85,7 @@ def run_step1(
 def run_step2(
     extractor: CausalityExtractor,
     db: Database,
+    batch_size: int = 512,
 ) -> int:
     """Extract (cause, effect) pairs from causal posts. Returns relation count."""
     print(f"[Step 2] Using '{extractor.name}' extractor")
@@ -118,14 +119,17 @@ def run_step2(
     all_relations = []
     try:
         t0 = time.perf_counter()
-        for i, post in enumerate(posts):
-            relations = extractor.extract(post)
-            for r in relations:
-                r.post_title = post.title
-            all_relations.extend(relations)
-            if (i + 1) % 10_000 == 0:
+        for batch_start in range(0, len(posts), batch_size):
+            batch = posts[batch_start:batch_start + batch_size]
+            batch_results = extractor.extract(batch)
+            for post, relations in zip(batch, batch_results):
+                for r in relations:
+                    r.post_title = post.title
+                all_relations.extend(relations)
+            processed = min(batch_start + batch_size, len(posts))
+            if processed % 10_000 == 0 or processed == len(posts):
                 elapsed = time.perf_counter() - t0
-                print(f"  Processed {i+1:,}/{len(posts):,} posts | {len(all_relations):,} relations | {elapsed:.0f}s")
+                print(f"  Processed {processed:,}/{len(posts):,} posts | {len(all_relations):,} relations | {elapsed:.0f}s")
 
         db.insert_relations(all_relations)
         db.finish_run(run_id, rows_out=len(all_relations))
@@ -236,6 +240,8 @@ def run_step4(
         db.update_cluster_member_counts()
         n_edges = db.rebuild_leaf_edges()
         print(f"[Step 4] Materialized {n_edges:,} leaf-level edges")
+        n_expand = db.rebuild_expand_edges()
+        print(f"[Step 4] Precomputed {n_expand:,} expand edges")
 
         elapsed = time.perf_counter() - t0
         db.finish_run(run_id, rows_out=len(clusters))
@@ -264,7 +270,7 @@ def run_all(config_path: str = "pipeline.yaml", step: int | None = None) -> None
 
     if step is None or step == 2:
         extractor = _build(config["step2_extraction"], CausalityExtractor)
-        run_step2(extractor, db)
+        run_step2(extractor, db, batch_size=config["step2_extraction"].get("batch_size", 512))
 
     if step is None or step == 3:
         canonizer = _build(config["step3_canonization"], EventCanonizer)

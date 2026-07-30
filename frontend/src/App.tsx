@@ -7,7 +7,7 @@ import { SettingsModal } from './components/SettingsModal'
 import { StatsModal } from './components/StatsModal'
 import { TextAnalyzerScreen } from './components/TextAnalyzerScreen'
 import { useClusterExpand } from './hooks/useClusterExpand'
-import { useGraph, useLevels } from './hooks/useGraph'
+import { useGraph } from './hooks/useGraph'
 import { readUrlState, syncUrlState } from './hooks/useUrlSync'
 import type { Screen } from './hooks/useUrlSync'
 import { getApiOverrides, setApiOverrides } from './api/client'
@@ -85,10 +85,8 @@ export default function App() {
     }
   }, [])
 
-  const { data: levelsData } = useLevels()
-  const topLevel = levelsData ? Math.max(...levelsData.levels) : 2
-  const { data: graphData, isLoading } = useGraph(topLevel, minPostCount)
-  const { expandCluster, collapseCluster, isExpanded, getExpandedData } = useClusterExpand()
+  const { data: graphData, isLoading } = useGraph(minPostCount)
+  const { expandCluster, collapseCluster, isExpanded, getExpandedData, expandedClusters } = useClusterExpand(minPostCount)
 
   // Restore expanded nodes from URL on first graph load
   const pendingExpansionsRef = useRef<number[]>(initialUrl.expanded)
@@ -125,26 +123,23 @@ export default function App() {
 
   const childNodesByParent = useMemo(() => {
     const map = new Map()
-    for (const nodeId of Array.from({ length: 10000 }, (_, i) => i)) {
+    for (const nodeId of expandedClusters) {
       const d = getExpandedData(nodeId)
       if (d) map.set(nodeId, d.nodes)
     }
     return map
-  }, [getExpandedData])
+  }, [expandedClusters, getExpandedData])
 
   const childEdgesByParent = useMemo(() => {
     const map = new Map()
-    for (const nodeId of Array.from({ length: 10000 }, (_, i) => i)) {
+    for (const nodeId of expandedClusters) {
       const d = getExpandedData(nodeId)
       if (d) map.set(nodeId, d.edges)
     }
     return map
-  }, [getExpandedData])
+  }, [expandedClusters, getExpandedData])
 
-  const expandedNodes = useMemo(
-    () => new Set(Array.from({ length: 10000 }, (_, i) => i).filter(isExpanded)),
-    [isExpanded]
-  )
+  const expandedNodes = expandedClusters
 
   // Sync expandedNodes to URL separately (its deps aren't easy to list above)
   useEffect(() => {
@@ -174,8 +169,8 @@ export default function App() {
   }, [graphData, childNodesByParent])
 
   const handleNodeDblClick = useCallback(
-    (clusterId: number, level: number) => {
-      if (level > 0) {
+    (clusterId: number, _level: number, hasChildren: boolean) => {
+      if (hasChildren) {
         if (isExpanded(clusterId)) {
           collapseCluster(clusterId)
         } else {

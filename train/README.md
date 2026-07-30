@@ -1,0 +1,1 @@
+This folder is self-contained and contains the training for the causality extraction.

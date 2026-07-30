@@ -1,0 +1,52 @@
+# Step 2b — Causal Relation Classification (causal / countercausal / no-rel)
+# Larger model (roberta-large); macro-F1 is the primary metric.
+# Dataset: CNC causality-identification (3075 train, 340 dev), expanded to per-pair examples.
+# CNC relationship values: 1=causal, 2=countercausal; no-rel generated from unrelated entity pairs.
+trainer:
+  max_epochs: 10
+  accelerator: gpu
+  devices: 1
+  precision: 16-mixed
+  gradient_clip_val: 1.0
+  val_check_interval: 0.5
+  log_every_n_steps: 20
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      project: clear27-rscience-corpus
+      entity: causenet
+      name: relation-cls-roberta-large
+      log_model: true
+  callbacks:
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: val/f1
+        mode: max
+        save_top_k: 1
+        filename: relcls-{epoch:02d}-f1{val/f1:.3f}
+    - class_path: lightning.pytorch.callbacks.EarlyStopping
+      init_args:
+        monitor: val/f1
+        mode: max
+        patience: 3
+    - class_path: lightning.pytorch.callbacks.LearningRateMonitor
+      init_args:
+        logging_interval: step
+
+model:
+  class_path: train.models.relation_classification.RelationClassificationModule
+  init_args:
+    model_name: roberta-large
+    learning_rate: 2e-5
+    weight_decay: 0.01
+    warmup_steps: 200
+
+data:
+  class_path: train.data.relation_classification.RelationClassificationDataModule
+  init_args:
+    train_path: train/datasets/countercausal-news-corpus/causality-identification/train.jsonl
+    val_path: train/datasets/countercausal-news-corpus/causality-identification/dev.jsonl
+    model_name: roberta-large
+    max_length: 128
+    batch_size: 32
+    num_workers: 4

@@ -6,37 +6,102 @@ min_score: 0            # Skip posts with score below this
 
 step1_detection:
   implementation: "pipeline.step1_detection.transformer_detector.TransformerDetector"
+  model: "models/detection"
+  batch_size: 512       # Titles per GPU batch; increase for more VRAM
 
 step2_extraction:
-  implementation: "pipeline.step2_extraction.transformer_extractor.TransformerExtractor"
-  spacy_model: "en_core_web_sm"   # or en_core_web_trf for better accuracy
+  # Biaffine span-grid model (RoBERTa-large backbone) replaces the old BIO
+  # token classifier — f1_gran=0.840 vs 0.744 on CNC dev, and produces clean
+  # cause/effect boundary splits instead of merged/fragmented spans. See
+  # notes.txt "Step 2a alternative" section for the full history.
+  # span_threshold=0.2 (not the 0.5 used for CNC-dev eval) — real Reddit
+  # titles are out-of-domain vs. CNC news sentences, and 0.5 under-recalls
+  # pair coverage there (47% of posts vs 74% for the old model); 0.2 restores
+  # coverage to ~74-79% while keeping the cleaner boundaries. See notes.txt.
+  implementation: "pipeline.step2_extraction.biaffine_extractor.BiaffineTransformerExtractor"
+  span_checkpoint: "/mnt/ceph/storage/data-tmp/2026/thagen/causalgraph/clear27-rscience-corpus/fnk81q1w/checkpoints/biaffine-span-epoch=14-f1granval/span_f1_gran=0.840.ckpt"
+  span_backbone: "roberta-large"
+  relation_model: "models/relation_classification"
+  span_threshold: 0.2
+  batch_size: 512                  # posts per extract() call; also the HF pipeline batch size
 
 step3_canonization:
-  implementation: "pipeline.step3_canonization.parsing_canonizer.ParsingCanonizer"
-
-  # TransformerCanonizer options
-  # Default: Qwen2.5-1.5B-Instruct (~3 GB RAM on CPU)
-  # Upgrade: Qwen/Qwen2.5-3B-Instruct or mistralai/Mistral-7B-Instruct-v0.3
-  model_name: "Qwen/Qwen2.5-3B-Instruct"
-  batch_size: 8          # Prompts per batch; increase for GPU (32–64)
-  max_new_tokens: 24     # Max output tokens; event spans are short
-  device: 0              # -1 = CPU; 0 = first CUDA GPU
+  # SentenceCanonizer: produces a full self-contained sentence for concrete
+  # events (deterministic WordNet clause realization first, LLM fallback for
+  # what it can't handle), falls back to the NP-completed phrase for generic/
+  # abstract concepts (genericity gate reuses the Step 4 hierarchy checkpoint).
+  # See notes.txt "Step 3: SentenceCanonizer" section for the full history,
+  # including the batching architecture and bugs found via real-data testing.
+  # Validated on pipeline_test.yaml (~8K posts): event coverage in Step 4
+  # improved 64.8% -> 73.9% vs. the old phrase-only ParsingCanonizer.
+  implementation: "pipeline.step3_canonization.sentence_canonizer.SentenceCanonizer"
+  device: 0
+  hierarchy_checkpoint_path: "/mnt/ceph/storage/data-tmp/2026/thagen/conf-causal-hierarchical-embeddings/hierarchical-embeddings-paper/ugao25w3/checkpoints/best.ckpt"
+  genericity_threshold: 0.25
+  llm_model_name: "Qwen/Qwen2.5-3B-Instruct"
+  llm_max_new_tokens: 80
+  llm_batch_size: 16
+  min_faithfulness_overlap: 0.6
 
 step4_hierarchy:
-  implementation: "pipeline.step4_hierarchy.embedding_clusterer.EmbeddingClusterer"
+  # PoincareClusterer discovers cluster heads FROM the event pool itself
+  # (min-norm member). This works only when the pool has a genuine abstraction
+  # gradient. Reddit causal events mostly don't ("climate change", "cancer",
+  # "depression" are all roughly equally specific) — min-norm head selection
+  # degenerates into directional noise, and force-assigning every event to its
+  # least-bad head (even when no cone actually contains it) produces wrong
+  # parents. See notes.txt (2026-07-02) for the diagnosis with concrete
+  # examples ("immune response" cluster containing only "climate change"
+  # events; root labels that are arbitrary AbsPyramid phrases).
+  #
+  # AnchorConeClusterer (below) fixes this by using a FIXED external anchor
+  # scaffold with real IS-A edges, and never force-assigning: an event only
+  # attaches if some anchor's cone actually contains it (E=0); otherwise it is
+  # left honestly unclustered.
+  #
+  # `scaffold` selects the anchor source (resources/<scaffold>_anchors.json,
+  # built by the matching build_<scaffold>_anchors.py):
+  #   wordnet  — WordNet noun taxonomy. Rejected: it is a *thing* taxonomy
+  #              (entity -> abstraction -> attribute; stray nodes like "Great
+  #              Lakes") and even splits events across event/state/phenomenon,
+  #              so it cannot yield event-type categories like "Conflict -> War".
+  #   maven    — 168 FrameNet-derived event types (Action/State/Scenario roots;
+  #              Attack -> Cause_harm -> Intentionally_act). Curated, in-repo.
+  #   wikidata — occurrence subtree from Wikidata P279 edges: conflict -> war,
+  #              disaster -> natural disaster -> drought, crisis -> economic
+  #              crisis. Best match for societal event categories.
+  #   go       — Gene Ontology Biological Process subtree: biological mechanisms
+  #              as events (inflammatory response -> defense response -> …;
+  #              gene expression -> metabolic process -> …). Covers the
+  #              biomedical majority of r/science that wikidata alone misses.
+  # `scaffold` may be a list to MERGE sources into one forest (namespaced ids,
+  # each source keeps its own tree). [wikidata, go] = societal events +
+  # biological mechanisms.
+  # Swap `implementation` to pipeline.step4_hierarchy.poincare.PoincareClusterer
+  # for the old adaptive event-pool clustering (comparison only).
+  implementation: "pipeline.step4_hierarchy.anchor_cone.AnchorConeClusterer"
+  checkpoint_path: "/mnt/ceph/storage/data-tmp/2026/thagen/conf-causal-hierarchical-embeddings/hierarchical-embeddings-paper/ugao25w3/checkpoints/best.ckpt"
+  scaffold: [wikidata, go]   # wordnet | maven | wikidata | go (list = merged forest)
 
-  # EmbeddingWardClusterer options
-  embedding_model: "all-MiniLM-L6-v2"
-  linkage_method: "ward"
-  n_clusters_per_level: [500, 100, 20]  # clusters at each level, finest → coarsest
-                                         # list length = number of levels (no upper limit)
-  max_texts: 8000    # O(n^2) memory cap; texts beyond this assigned by nearest centroid
-  use_norm: false    # false = embed canonical description; true = embed lowercased norm
+  # Cone geometry
+  cone_K: 0.5            # aperture scaling — must match model training (ugao25w3 default)
+  eps: 1.0e-4            # numerical tolerance for "E(anchor, event) == 0" containment
 
-  # TFIDFClusterer options
-  tfidf_max_features: 5000
-  tfidf_n_top_clusters: 200
+  # Inference
+  batch_size: 256
+  device: "cuda"
+  use_norm: false        # false = embed canonical description; true = embed lowercased norm
 
-  # EmbeddingClusterer (HDBSCAN) options
-  min_cluster_size: 10
-  min_samples: 5
+  # Leaves with fewer than this many directly-assigned events get merged into
+  # their nearest sufficiently-populated ancestor — without this, ~21-43% of
+  # leaves were singletons (a leaf should generalize over multiple posts that
+  # can't be split further, not be a one-off anchor match). See notes.txt.
+  min_leaf_size: 5
+
+  # --- Alternative: PoincareClusterer (adaptive event-pool clustering) ---
+  # implementation: "pipeline.step4_hierarchy.poincare.PoincareClusterer"
+  # min_cluster_size: 20   # stop subdividing when a cluster has ≤ this many event texts
+  # branching_factor: 10   # target children per subdivision step
+  # max_depth: 15          # safety cap on recursion (natural depth is usually 5–8)
+  # inject_knowledge: "abspyramid"
+  # abspyramid_path: "/mnt/ceph/storage/data-tmp/2026/thagen/conf-causal-hierarchical-embeddings/datasets/abspyramid/data-synpos-autocleaned/crossevent/train.parquet"

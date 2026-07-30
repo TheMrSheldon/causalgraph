@@ -7,9 +7,21 @@ from pydantic import BaseModel
 class ClusterNode(BaseModel):
     id: int
     label: str
-    level: int          # 0=leaf, 1=mid, 2=top
+    level: int          # post-order height: 0=leaf, increases toward root
     parent_id: int | None
     member_count: int
+    has_children: bool = False
+
+    @classmethod
+    def from_row(cls, raw: dict) -> "ClusterNode":
+        return cls(
+            id=raw["id"],
+            label=raw["label"],
+            level=raw["level"],
+            parent_id=raw["parent_id"],
+            member_count=raw["member_count"],
+            has_children=bool(raw.get("has_children", False)),
+        )
 
 
 class GraphEdge(BaseModel):

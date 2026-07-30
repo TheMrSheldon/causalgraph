@@ -127,14 +127,14 @@ class CausalityExtractor(Protocol):
     (cause, effect) pairs as CausalRelation objects.
     """
 
-    def extract(self, post: Post) -> list[CausalRelation]:
+    def extract(self, posts: list[Post]) -> list[list[CausalRelation]]:
         """
         Args:
-            post: A Post confirmed to contain a causal claim.
+            posts: A batch of Posts confirmed to contain causal claims.
 
         Returns:
-            One or more CausalRelation objects. Returns empty list only
-            if extraction genuinely fails (do not raise).
+            One list of CausalRelation objects per input post, in the same order.
+            Inner lists may be empty if extraction fails for that post.
             cause_canonical / effect_canonical are left empty here;
             they are filled by Step 3 (canonization).
         """

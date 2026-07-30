@@ -263,7 +263,7 @@ interface CausalGraphProps {
   childEdgesByParent: Map<number, GraphEdge[]>
   settings: GraphSettings
   selectedClusterId?: number | null
-  onNodeDblClick: (clusterId: number, level: number) => void
+  onNodeDblClick: (clusterId: number, level: number, hasChildren: boolean) => void
   onNodeRightClick: (clusterId: number) => void
   onNodeClick: (clusterId: number) => void
   onEdgeClick: (edge: SelectedEdge) => void
@@ -305,6 +305,7 @@ function toCytoscapeElements(
         label_with_count: `${node.label}\n${node.member_count.toLocaleString()}`,
         level: node.level,
         member_count: node.member_count,
+        has_children: node.has_children,
       },
       classes: `level-${node.level}`,
     })
@@ -364,7 +365,7 @@ export function CausalGraph({
   const prevNodesRef = useRef<ClusterNode[]>([])
   const prevEdgesRef = useRef<GraphEdge[]>([])
   const [contextMenu, setContextMenu] = useState<{
-    x: number; y: number; clusterId: number; level: number; label: string
+    x: number; y: number; clusterId: number; level: number; label: string; hasChildren: boolean
   } | null>(null)
   const [focusStack, setFocusStack] = useState<Array<{ id: number; label: string; level: number }>>([])
   const focusStackRef = useRef(focusStack)
@@ -525,7 +526,8 @@ export function CausalGraph({
     cy.on('dblclick', 'node', (evt) => {
       const id = parseInt(evt.target.id().replace('cluster-', ''), 10)
       const level = evt.target.data('level') as number
-      onNodeDblClick(id, level)
+      const hasChildren = evt.target.data('has_children') as boolean
+      onNodeDblClick(id, level, hasChildren)
     })
 
     cy.on('cxttap', 'node', (evt) => {
@@ -534,7 +536,8 @@ export function CausalGraph({
       const level = evt.target.data('level') as number
       const label = evt.target.data('label') as string
       const { clientX, clientY } = evt.originalEvent as MouseEvent
-      setContextMenu({ x: clientX, y: clientY, clusterId: id, level, label })
+      const hasChildren = evt.target.data('has_children') as boolean
+      setContextMenu({ x: clientX, y: clientY, clusterId: id, level, label, hasChildren })
     })
 
     cy.on('tap', 'node', (evt) => {
@@ -735,7 +738,7 @@ export function CausalGraph({
   }, [contextMenu])
 
   const isExpanded = expandedNodes.has(contextMenu?.clusterId ?? -1)
-  const canExpand = (contextMenu?.level ?? 0) > 0 && !isExpanded
+  const canExpand = (contextMenu?.hasChildren ?? false) && !isExpanded
   const canCollapse = isExpanded
 
   return (
@@ -750,7 +753,7 @@ export function CausalGraph({
         >
           {canExpand && (
             <button className="node-context-item" onClick={() => {
-              onNodeDblClick(contextMenu.clusterId, contextMenu.level)
+              onNodeDblClick(contextMenu.clusterId, contextMenu.level, contextMenu.hasChildren)
               setContextMenu(null)
             }}>
               <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="7 4 13 10 7 16"/></svg>
@@ -768,11 +771,11 @@ export function CausalGraph({
           )}
           {(canExpand || canCollapse) && <div className="node-context-separator" />}
           <button className="node-context-item" onClick={() => {
-            const { clusterId, level, label } = contextMenu
+            const { clusterId, level, label, hasChildren } = contextMenu
             const alreadyExpanded = expandedNodes.has(clusterId)
             setFocusStack((s) => [...s, { id: clusterId, label, level }])
-            if (level > 0 && !alreadyExpanded) {
-              onNodeDblClick(clusterId, level)
+            if (hasChildren && !alreadyExpanded) {
+              onNodeDblClick(clusterId, level, hasChildren)
               focusAutoExpandedRef.current.add(clusterId)
             }
             setContextMenu(null)

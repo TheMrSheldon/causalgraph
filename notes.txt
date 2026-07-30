@@ -1,0 +1,733 @@
+Notes for CLEAR conference paper
+==================================
+
+-- Pipeline Run Results (fine-tuned models, June 2026) --
+
+Models:
+  Step 1: models/detection/              RoBERTa-large causality detection
+  Step 2: models/span_detection/         RoBERTa-large BIO span detection
+          models/relation_classification/ RoBERTa-large causal/countercausal/no-rel
+  Step 3: ParsingCanonizer               spaCy NP expansion
+  Step 4: EmbeddingClusterer             HDBSCAN + all-MiniLM-L6-v2
+
+Numbers:
+  r/science submissions:        859,721
+  Detected causal (step 1):     160,335  (18.6%)
+  Extracted relations (step 2):  193,195  after no_rel + short-span (< 5 ch) filters
+    causal:                      161,156
+    countercausal:                32,039
+  Clusters (step 4):               1,242  (leaf: 1,182 / mid: 54 / top: 6)
+  Leaf-level causal edges:         8,903
+
+Top-level themes (level 2): broad health/science · medical treatment · climate/warming ·
+  oncology · neurodegenerative disease · mental health
+
+-- Pipeline Run Results (biaffine Step 2 model, 2026-07-04) --
+
+Full production database reprocessed (steps 2-4) after swapping Step 2's span
+model from the old RoBERTa-large BIO token classifier to the biaffine span-grid
+model (f1_gran=0.840 vs 0.744 on CNC dev; see "Step 2a alternative" section
+below for the full development history). Old DB backed up to
+data/pipeline.db.bak-2026-07-04 before reprocessing — needed for old-vs-new
+comparison evals (human precision eval, etc.).
+
+Models:
+  Step 2 span:  BiaffineSpanDetectionModule, RoBERTa-large backbone
+                checkpoint: clear27-rscience-corpus/fnk81q1w/checkpoints/
+                            biaffine-span-epoch=14-f1granval/span_f1_gran=0.840.ckpt
+                span_threshold=0.2 (lower than the 0.5 used for CNC-dev eval —
+                real Reddit titles are out-of-domain vs. CNC news sentences;
+                0.5 under-recalled pair coverage there, 47% of posts vs 74%
+                for the old model at matched settings; 0.2 restores coverage
+                to ~74-79% while keeping the cleaner span boundaries)
+  extractor:    pipeline.step2_extraction.biaffine_extractor.BiaffineTransformerExtractor
+  Step 3/4:     unchanged (ParsingCanonizer, AnchorConeClusterer)
+
+Numbers (full 859,721-post corpus, 160,335 causal posts from Step 1 — Step 1
+was not rerun, same causal-post set as before):
+                              OLD (BIO model)   NEW (biaffine model)
+  Relations (step 2):             193,195            157,172
+  Clusters (step 4):                 1,242             10,977
+  Event coverage (step 4):           56.3%              68.1%
+  Leaf-level causal edges:            8,903             66,963
+
+Runtime (full corpus): step 2 ~40min, step 3 ~21s, step 4 ~4.4min — much
+faster than the old model's historical throughput (30 posts/sec), since the
+biaffine model's cleaner spans produce fewer candidate pairs to classify, and
+Step 3 uses the fast spaCy-based ParsingCanonizer (not an LLM) in this config.
+
+Fewer relations despite higher per-relation quality is expected: the old BIO
+model over-generated fragmented/merged spans (see decoding comparison below),
+which inflated the raw pair count with candidates that mostly got classified
+as no-rel anyway. Higher clustering coverage (68.1% vs 56.3%) is a genuine
+downstream benefit of cleaner cause/effect phrasing embedding closer to the
+WordNet/Wikidata/GO anchor scaffold.
+
+Sample comparison (300 random Reddit titles, before threshold tuning):
+  old model: avg 2.29 spans/post, 16.0% zero-span, 73.7% posts with a pair
+  new model (thresh=0.5): avg 1.41 spans/post, 26.7% zero-span, 47.3% w/ pair
+  new model (thresh=0.2): avg spans/pair-coverage restored to ~old level
+  Qualitative: new model cleanly splits cause/effect instead of merging into
+  one span (e.g. "Cancer drug aids the regeneration of spinal cord injuries"
+  -> old: one merged span; new: ["Cancer drug", "aids the regeneration..."]),
+  and has none of the old model's leading-space/fragment artifacts.
+
+TODO: human precision eval comparing old vs. new DB (matched relation sample,
+blind-shuffled) to get a measured end-to-end quality delta, not just the
+CNC-dev f1_gran number, for the paper.
+
+-- Step 3: SentenceCanonizer (2026-07-04/05) --
+
+Spec change from the original ParsingCanonizer/TransformerCanonizer design:
+canonical output should be a single self-contained SENTENCE describing the
+event (not a noun phrase), except when the event is too generic/abstract to
+sensibly express as a clause (e.g. "cancer", "climate change") — those are
+fine to leave as a phrase rather than invent specificity that isn't there.
+
+Root-cause finding on the abandoned TransformerCanonizer (Qwen2.5-3B) attempt:
+the observed "garbage" output was NOT hallucination/fabricated facts. Its
+prompt design was actually reasonable (system prompt, 3 few-shot chat turns,
+greedy decoding) but max_new_tokens=24 with a chat-instruct model that wasn't
+forced to skip its conversational preamble ("Sure, here's...") could burn the
+entire token budget on filler before any payload was generated — a decoding-
+control failure, not a reasoning failure. This reframes constrained decoding
+as a strong fix for THIS failure mode specifically (structurally impossible
+for the grammar to start with a preamble), though it does NOT by itself
+guarantee the content is grounded in the source — a schema only enforces
+valid JSON, not faithfulness.
+
+Coreference resolution: confirmed as a known, scaffolded-but-never-finished
+gap, not a fresh idea. Git history shows a collaborator (Liesbeth Allein)
+installed fastcoref and wired it into an early canonizer prototype in April,
+then removed it across 4 commits same day with no explanation. Current
+parsing_canonizer.py still carries a `self._coref = None` stub and the full
+F-coref docstring/examples, unused. SentenceCanonizer finishes this: fastcoref
+resolves pronouns inside the NP-completed phrase against the source text,
+picking the longest non-pronoun mention in the coreference cluster as the
+antecedent (matches both docstring examples exactly after fixing a possessive
+double-marking bug: "their" -> antecedent + "'s", stripping any existing "'s"
+on the antecedent first).
+  Compatibility note: fastcoref (last released 2023) is incompatible with the
+  installed transformers 5.12.1 — FCorefModel's older-API __init__ never
+  triggers the tie_weights()/post_init() call that sets a new required
+  `all_tied_weights_keys` instance attribute, so from_pretrained() crashes.
+  Fixed with a scoped monkeypatch (class-level empty-dict default) applied
+  only right before importing fastcoref, not a global transformers downgrade
+  — safe because properly-initialized models (RoBERTa/DeBERTa/Qwen) always
+  set their own instance attribute, shadowing the class-level default.
+  Separately: en_core_web_sm was not installed in this environment, so
+  ParsingCanonizer's NP-completion has been silently a no-op (returns the raw
+  span verbatim) for as long as this environment has run Step 3, INCLUDING
+  the 2026-07-04 full-corpus biaffine reprocessing run above — every
+  cause_canonical/effect_canonical in that DB currently equals the raw
+  cause_text/effect_text. Fixed (pip installed en_core_web_sm); Step 3 needs
+  re-running against the production DB once a canonizer choice is finalized.
+
+Architecture (pipeline/step3_canonization/sentence_canonizer.py), per span:
+  1. NP completion (reused from parsing_canonizer._noun_phrase_completion) —
+     but SKIPPED when the raw span already has a verbal root. NP-completion
+     is designed to strip a leading verb down to its object NP (intentional,
+     documented behavior: "triggers inflammation" -> "inflammation", correct
+     for the old phrase-only canonizer) — but destructive here: a span like
+     "Protect Pediatric Population" is already a clause, and stripping
+     "Protect" throws away the actual causal claim before any downstream step
+     can recover it. Found via real-data testing, not anticipated up front.
+  2. Coreference resolution on the resulting phrase (see above).
+  3. Genericity gate — embed the phrase with the SAME hierarchical-embedding
+     checkpoint Step 4 uses (ugao25w3, no new model/training needed) and
+     threshold its Poincare-ball norm. Empirically verified to cleanly
+     separate generic single-word concepts (cancer 0.21, depression 0.17,
+     climate change 0.24, anxiety 0.18) from concrete multi-clause
+     descriptions (0.28-0.50), no overlap in the sample tested. This is the
+     SAME checkpoint flagged for "radial collapse" in the step4 diagnosis
+     above — but that issue was about fine-grained depth resolution AMONG
+     already-concrete items (which anchor is the tightest parent), not the
+     generic-vs-concrete split near the origin, which is unaffected.
+     genericity_threshold=0.25 default, tuned on a small sample — worth
+     re-checking on a larger one.
+  4. Deterministic clause realization — nominal head's WordNet top-2-sense
+     (frequency-ordered) derivational verb, e.g. "destruction"->"destroy",
+     "mining"->"mine". Restricting to top-2 senses (not all senses) was
+     necessary: unioning all senses picks wrong rare senses ("risk" ->
+     "jeopardise", "spread" -> "banquet"/"feast"). Realizes:
+       - possessor + "of X" both present -> active, complete: "White
+         America's racial resentment"-style (no object -> deferred to LLM).
+       - only "of X" object present -> passive, no agent invented: "the
+         mining of metals" -> "Metals are mined."
+       - bare noun, no complement -> neutral occurrence filler, avoiding a
+         circular re-verb of the same head: "flooding" -> "Flooding occurs."
+         (subject-verb agreement checked: "ideas" -> "occur", not "occurs")
+     A denylist (_NON_EVENT_HEADS: risk, effect, impact, likelihood, ...)
+     defers epistemic/modal nouns to the LLM — WordNet gives them a
+     derivational verb but passivizing is wrong ("the risk of cancer" ->
+     "cancer is risked" is nonsensical). Only fires when the transformation
+     is structurally unambiguous and complete; never invents an argument.
+     NOMLEX/NomBank (the standard resources for this) are LDC-licensed and
+     not accessible in this environment — the WordNet approach is the free
+     alternative, with materially lower argument-structure precision but
+     validated empirically to work well for the common corpus vocabulary.
+  5. LLM fallback (outlines 1.3.1, JSON-schema-constrained via a Pydantic
+     model — outlines' Generator does not accept a raw JSON-schema dict in
+     this version, needs a pydantic.BaseModel) for phrases step 4 can't
+     confidently realize. Verified end-to-end with Qwen2.5-0.5B-Instruct:
+     constrained decoding produced clean, on-topic JSON with no preamble
+     even at this tiny model size, confirming the root-cause diagnosis above.
+     A content-lemma-overlap check runs after generation (>=60% of source
+     content lemmas must appear in the output) — reject and fall back to the
+     deterministic-or-phrase result rather than trust ungrounded generation.
+     A bare single-token phrase (e.g. a drug name like "Ayahuasca") has no
+     internal structure for step 4 to use, but the LLM fallback still
+     receives the full source sentence as context and is prompted to pull
+     the specific missing detail from it when the phrase alone is too sparse
+     — confirmed working: "Ayahuasca" alone -> "Ayahuasca increased
+     serotonin, dopamine turnover and BDNF levels in the rat brain..." by
+     pulling the finding from the source sentence, not left unchanged.
+
+Note: cause and effect are canonicalized independently and may end up
+duplicating overlapping context from the same source sentence (e.g. both
+mentioning the same background fact). This is fine/desirable, not a bug —
+no fix planned.
+
+Performance: initial implementation processed each span with a separate
+coref/embedding/LLM call — measured at ~2.5s/span with Qwen2.5-0.5B, worse
+with 3B; completely infeasible at corpus scale (~314K spans -> single-digit
+days to weeks). Batched (2026-07-05):
+  - Coref: fastcoref's predict() already batches a list of texts internally
+    — one call per canonize() invocation for all unique source texts
+    (_prefetch_clusters), not one call per span.
+  - Genericity gate: one _embed_poincare call for all phrases in the batch.
+  - LLM fallback: switched from outlines.Generator (v1.3 API only accepts a
+    single prompt string per call) to the lower-level pattern — a standalone
+    outlines JSON-schema logits processor (outlines.backends.
+    get_json_schema_logits_processor) passed into HF's own batched,
+    left-padded model.generate(), the same pattern TransformerExtractor/
+    TransformerCanonizer already use. Gotcha found empirically: the logits
+    processor carries internal FSM state that is NOT reset between separate
+    generate() calls — reusing one processor instance across sequential
+    batches silently produced empty output on every batch after the first.
+    Fixed by constructing a fresh processor per batch (cheap; verified
+    correct and only ~5.7s for 3 sequential batches vs. broken when reused).
+  Result: 0.444s/span end-to-end with the real Qwen2.5-3B-Instruct model on
+  real corpus spans (~15-20x faster than unbatched) -> ~39h projected for the
+  full ~314K-span corpus. Long but a tractable background job, unlike the
+  unbatched version.
+
+Deterministic-path faithfulness gate: found a case where the WordNet-based
+clause realizer produces a confidently WRONG sentence from an ambiguous
+title-cased headline parse: "Drinking Water Of Billions In Danger" ->
+"Billions In Danger are watered." (meaning reversed/garbled). Notably, this
+exact failure would PASS the lemma-overlap faithfulness check (same words:
+water/billion/danger, just scrambled relations between them) — the check
+catches invented content, not scrambled relations among preserved words, a
+real and acknowledged limitation. Applied anyway as a strictly-better-than-
+nothing gate: the deterministic clause output now also runs through
+_is_faithful() before being accepted, falling through to the LLM otherwise
+(previously ungated, trusted unconditionally).
+
+Real bug found and fixed via testing: pronoun substitution was matching by
+span CONTAINMENT instead of EXACT match against fastcoref's cluster mentions,
+so a relative pronoun like "who" (sitting inside a phrase's own char range,
+e.g. "People who commute short distances...") matched against the cluster's
+own enclosing mention and got replaced by the ENTIRE phrase it was already
+part of — a self-referential duplication ("People who commute..." ->
+"People People who commute...work commute...work occur."). Fixed by
+requiring (tok_start, tok_end) be an exact listed mention in the cluster, not
+merely contained within one.
+
+Known residual limitation, not fixed (out of scope — pre-existing in the
+REUSED parsing_canonizer._noun_phrase_completion, not new code): inverted-
+question-syntax headlines ("Did global warming lead to flooding?") can
+mis-parse under spaCy's dependency parser, extending the NP boundary to
+incorrectly include a following verb ("global warming" -> "global warming
+lead"). This happens upstream of every downstream faithfulness gate (which
+only checks OUR stages against their own input, not against the original raw
+span), so it isn't currently caught. Rare in practice; flagging honestly
+rather than silently shipping.
+
+Status: implemented, batched, and validated through several rounds of real-
+corpus testing with the production Qwen2.5-3B-Instruct model. Validated via
+the actual pipeline.runner CLI path (not just ad-hoc script calls) on
+pipeline_test.yaml (~8K posts): Step 3 completed in 27.5 min (faster than the
+0.444s/span projection — many spans resolved via the fast deterministic/
+genericity paths without needing the LLM), 68-77% of spans meaningfully
+transformed into sentences, mostly correct on real relation samples. Chained
+into Step 4: cluster coverage improved 64.8% -> 73.9% vs. the old phrase-only
+ParsingCanonizer on the same relations — full sentences with resolved
+coreference embed more cleanly against the WordNet/Wikidata/GO anchors.
+pipeline.yaml and pipeline_test.yaml both now point step3_canonization at
+SentenceCanonizer.
+
+Production run, attempt 1 (2026-07-05): crashed ~2 minutes in, before any
+progress was written (run_step3 calls canonize() once for the WHOLE relation
+set, so a crash anywhere loses everything since the last DB write — there is
+no partial-progress checkpointing). Cause: fastcoref's get_clusters()
+occasionally returns a cluster containing a None entry for a mention it
+couldn't resolve to a valid span — not reproduced in ANY of the smaller
+curated test samples (a handful to ~8K posts), only surfaced once given the
+full corpus's ~100K diverse real post titles. Fixed at the source (filter
+None mentions, drop clusters left with <2 valid mentions, in
+_prefetch_clusters). Given the stakes of a single all-or-nothing multi-hour
+call, also hardened the whole per-span pipeline defensively: Phase 1 (NP
+completion + coref), Phase 2 (genericity), and Phase 3 (deterministic clause)
+are now each wrapped so one unanticipated edge case falls back to the raw
+span/phrase for that item and logs a warning, instead of crashing the entire
+run.
+
+Production run, attempt 2 (2026-07-05 13:36-22:49): SUCCEEDED. Canonized
+157,172 relations in 32,987s (~9.16h) — well under the ~39h worst-case
+estimate, since most spans resolved via the fast genericity/deterministic
+paths without needing the LLM. Exactly ONE defensive fallback triggered
+across the entire run (a "list index out of range" on a different edge case
+than the fastcoref crash, gracefully absorbed instead of crashing) — confirms
+the hardening targets genuinely rare cases, not a systemic bug. Verified real
+writes: 31.2%/23.0% of cause/effect fields unchanged (68.8%/77.0%
+transformed into sentences), consistent with the smaller-scale validation.
+NOTE: run_step3's DB write is still all-or-nothing (update_canonical_fields
+only called after the full canonize() call returns) — a crash near the end of
+a future multi-hour run would still lose everything. Worth adding incremental
+checkpointing to run_step3 if this canonizer (or an even slower one) needs to
+run again at this scale.
+
+Chained into Step 4 (with the min_leaf_size fix, see "Step 4: leaf-cluster
+size fix" section below) — full production numbers, OLD (biaffine + old
+canonizer) vs NEW (biaffine + SentenceCanonizer + leaf-merge):
+  Clusters:            10,977  ->  5,788
+  Event coverage:        68.1% ->   76.5%
+  Leaf-level edges:      66,963 ->  72,039
+  Leaf singletons:        21.3% ->   0.0%
+  Leaf median size:            4 ->  18
+Both the canonization and leaf-merge improvements compound: coverage keeps
+climbing (56.3% original -> 64.8% biaffine-only -> 68.1% -> 73.9% test-DB
+sentence canonizer -> 76.5% full production), and leaves now genuinely
+generalize over multiple posts as intended, not one-off anchor matches.
+
+-- Step 3: pair-leakage bug in SentenceCanonizer (2026-07-06) --
+
+Found via manual inspection of the production DB (not caught by any of the
+earlier automated testing, which checked faithfulness/coreference/grammar but
+never checked whether a canonical description stayed within its OWN side of
+the relation): a large fraction of LLM-realized sentences described the
+WHOLE cause->effect claim instead of standing alone as a description of just
+the one event/concept they were meant to canonicalize. Confirmed systemic,
+not occasional, on inspection: e.g. "Deworming" (cause) and its own effect
+"high social rate of return" BOTH collapsed to the identical sentence
+"Deworming has a high social rate of return." Direction-agnostic — happened
+with cause absorbing effect content and effect absorbing cause content
+about equally often.
+
+Root cause: the LLM fallback's system prompt told the model to "pull the
+specific missing detail from the Context" for sparse phrases, with no
+instruction forbidding it from stating the OTHER side of the relationship —
+and the prompt's own few-shot example modeled the bug ("Ayahuasca" ->
+"Ayahuasca increases serotonin and dopamine turnover in the rat brain",
+which is literally the paired effect, not a description of Ayahuasca
+itself). The deterministic WordNet-clause path was never affected (it only
+ever sees the one phrase, no context/sibling access), confirming the LLM
+prompt as the sole source.
+
+Fix: rewrote the system prompt with an explicit, direct prohibition
+("must NOT state what the phrase's event causes, what caused it, or the
+outcome/result described elsewhere in the Context"), replaced the flawed
+Ayahuasca example ("Ayahuasca was administered to rats." — describing the
+ACT, not the neurochemical outcome), and added a contrastive same-source
+pair example showing both sides staying isolated. Also fixed a secondary
+issue found while validating: the faithfulness check's lemma-only comparison
+spuriously rejected some genuinely good, non-leaking outputs, because a
+single-word phrase like "Deworming" parses as VERB in isolation (lemma
+"deworm") but as NOUN when embedded in a full generated sentence ("The
+deworming of primary schools", lemma "deworming") — same word, different
+lemma depending on syntactic context. Fixed by matching on lemma OR surface
+form (_content_tokens/_is_faithful in sentence_canonizer.py) — strictly more
+permissive, can only fix false rejections, not hide genuine leaks.
+
+Measured on 25 relations (50 spans) sampled from the flawed production DB,
+re-canonized with the fix:
+  still leaking the paired concept:  ~2% (1-2/50, down from pervasive)
+  falls back to plain phrase:        ~62%
+  correctly enhanced, no leak:       ~36%
+The 62% conservative-fallback rate is not a further bug to chase — many
+extracted effect fragments (e.g. "boost tree lives", "reduce prescription
+opioid use") genuinely have little independent identity apart from being the
+consequence of their cause, so refusing to invent standalone content and
+falling back to the honest plain phrase is the correct, safe behavior once
+leakage is forbidden, not a deficiency. This is an inherent trade-off of the
+fix, not a regression: pervasive misleading merged sentences before vs. an
+honest but less complete canonical form now.
+
+Production re-run attempt (2026-07-06, 7.24h, run "leakfix"): succeeded, 0
+crashes, 1 rare fallback. BUT manual inspection of a larger real sample (not
+just the automated 50-span validation) found the fix was incomplete — still
+visibly leaking on some relations (e.g. "Sleeping Too Little" and its own
+effect "Increase Dementia Risk" both collapsed to the identical sentence),
+PLUS two new coref-substitution bugs surfaced at this scale that hadn't shown
+up in smaller samples:
+  1. Contraction clitics: substituting a pronoun immediately followed by an
+     unspaced clitic ("they're") leaves the clitic dangling on the
+     replacement noun phrase ("Oregon shore crabs're exposed" instead of
+     "...are exposed").
+  2. Oversized/repeated antecedent: a cluster's "longest mention" can be a
+     long, itself-self-referential clause (70+ chars); using it as the
+     antecedent for MULTIPLE pronouns within one short phrase duplicates that
+     entire clause more than once in the output.
+Both fixed in _resolve_pronouns (sentence_canonizer.py): skip substitution
+when the pronoun is immediately followed by an unspaced apostrophe/clitic, or
+when the antecedent exceeds 50 characters — a small loss (an unresolved
+pronoun) versus a guaranteed grammar break or duplication.
+
+Deeper architectural finding on the residual leakage: _is_faithful only
+verifies source content is PRESERVED in the output — it has no mechanism to
+catch EXTRA content being ADDED, and leaked sibling content isn't
+"hallucinated" (it's genuinely present in the shared context text), so a
+prompt instruction alone reduces but cannot structurally guarantee against
+it. Added _leaks_sibling(): using the pipeline's guaranteed cause/effect
+pairing convention (run_step3 always calls canonize() with relations laid
+out as consecutive (cause, effect) pairs sharing the same source text —
+detected defensively per-pair, not assumed globally, so other callers
+degrade safely), checks whether a candidate output restates the SIBLING
+span's distinctive content (excluding anything already legitimately shared
+with the phrase itself, to avoid false positives on shared topic words).
+Gates BOTH the deterministic-clause and LLM-realized outputs.
+  Also found a THIRD leakage source this same check needed to cover: pair
+  leakage via coreference itself, not just LLM narration. "profiting its own
+  proliferation" (effect) — "its" CORRECTLY (per ordinary coreference) refers
+  back to "A male-killing bacterium" (the cause), so resolving it is
+  coreference-accurate but reintroduces the exact leakage this canonizer must
+  avoid. Extended _resolve_pronouns with an optional sibling_raw parameter;
+  a candidate antecedent is rejected (pronoun left unresolved) if it leaks
+  the sibling's distinctive content, using the same _leaks_sibling check.
+
+Final validation (40 relations / 80 spans, all fixes applied): 0/80 still
+leaking, 48/80 (60%) fall back to plain phrase, 32/80 (40%) correctly
+enhanced. Zero measured leakage, matching the intended "standalone
+description per event" requirement.
+
+Status: all fixes implemented and validated on real-data samples pulled
+directly from the flawed production DB. Third production Step 3 run launched
+2026-07-06 (run "siblingfix") — see top of file for final numbers once
+complete, then Step 4 needs rerunning too (new canonical text changes
+embeddings). Backup chain for this sequence of fixes:
+  data/pipeline.db.bak-2026-07-05-pre-sentence-canonizer      (pre-any SentenceCanonizer)
+  data/pipeline.db.bak-2026-07-06-pre-leakage-fix             (attempt 1: pervasive leakage)
+  data/pipeline.db.bak-2026-07-06-pre-sibling-leak-fix        (attempt 2: ~2-4% residual leakage + coref bugs)
+Lesson for future canonizer work: automated validation on small random
+samples (25-50 relations) caught the FIRST-order bug (pervasive leakage) but
+missed lower-frequency issues (contraction handling, oversized antecedents,
+coref-driven leakage) that only showed up under manual inspection of a purely
+production-scale sample — this pipeline's canonization diagnosis has now
+twice been "measured validation looked fine, manual inspection at real scale
+found real bugs," suggesting future changes here should include a real
+manual-inspection pass on production-scale output before considering the
+work done, not just automated sampling.
+
+-- Training (Step 2) --
+
+Framework: PyTorch Lightning 2.3+ / LightningCLI. WandB: causenet/clear27-rscience-corpus.
+
+Dataset: CNC/RECESS (CC-BY-4.0, news domain).
+  Span detection:          3,075 train / 340 dev sentences; 4,207 / 473 entity spans.
+  Relation classification: 3,531 train / 377 dev directed pairs
+                           (1,305/120 causal · 886/118 countercausal · 1,340/139 no-rel).
+
+Step 2a — span detection: RoBERTa-large token classifier, BIO. Subword continuations
+  masked via word_ids(). Monitor: macro-F1; also logs per-class F1 + span-level metrics
+  (precision, recall, F1, granularity, F1-gran, IoU) from train/eval/span_metrics.py.
+  Primary paper metric: F1-gran (penalizes over-segmentation; granularity=1 → equals F1).
+
+Step 2b — relation classification: RoBERTa-large sequence classifier.
+  Input: sentence with <e0>cause</e0> / <e1>effect</e1> markers.
+  CNC records expanded to all directed pairs; unlabeled pairs → no-rel.
+  Result: per-class F1 >85% on CNC dev for all three classes.
+  Direction confusion (50/50 with base checkpoint) resolved by fine-tuning.
+  Limitation: 3,075 CNC sentences is small for RoBERTa-large; adding BECauSE 2.0
+  and UniCausal would improve generalization.
+
+-- Step 2a alternative: attention-based span detection experiments (2026-06/07) --
+
+Idea: learned single-head Q/K attention on top of RoBERTa-large; auxiliary BCE
+"structure loss" trains the L×L symmetrised attention matrix toward the target
+matrix M[i,j] = 1 iff tokens i,j in the same gold span, 0 otherwise. Per-token
+classifier reads out from softmax(attention) context vectors; spans decoded by
+thresholding token probabilities + adjacency grouping.
+(train/models/attention_span_detection.py)
+
+Metric note: val/span_f1_gran = f1/log2(1+granularity), macro over POSITIVE-gold
+dev sentences only. Earlier runs looked capped at 0.481 because empty-gold
+sentences always score 0 under the Touché span metric (dev is 39% negative);
+fixed by positive-only evaluation (uses ctk.evaluation._spans from causalatee).
+
+Run history (CNC dev, f1_gran):
+  readout [h;ctx], either_span loss, w=0.5    0.713   (hg9y366n)
+  readout [h;ctx], either_span loss, w=1.0    0.744   BEST (t014ljv1)
+  readout [h;ctx], all-pairs loss             0.665   (k0vb1lw7) spans merged
+  readout ctx-only, either_span loss          0.717   (fsblwta0) clean blocks, bg noisy
+  readout ctx-only, all-pairs loss            0.553   (mgb88i65) early-stopped
+
+Why it kept failing (architectural, not tuning):
+  1. Softmax conflict: structure loss demands background rows -> all zeros, but
+     the readout consumes softmax(A) whose rows MUST sum to 1. A background
+     token has to attend somewhere; forcing its raw row uniformly negative makes
+     its context vector the sentence mean. The two losses demand mathematically
+     incompatible matrices -> every all-pairs (bg-supervised) run lost ~0.07-0.16.
+  2. BCE trains absolute cell values; softmax readout is shift-invariant per
+     row — same matrix, two different objectives.
+  3. The same-span pairwise relation CANNOT represent overlapping spans: shared
+     token makes the relation non-transitive, connected components merge spans.
+  4. The trained attention matrix was never used for decoding (per-token
+     threshold + gap heuristic instead).
+
+Conclusion -> switched to biaffine span grid (Yu et al. 2020, "NER as Dependency
+Parsing"), the standard for nested/overlapping NER:
+  grid[i,j] = 1 iff a span STARTS at token i and ENDS at token j
+  scores = biaffine(MLP_start(h), MLP_end(h)); BCE over upper-triangle cells;
+  decode = threshold on sigmoid(grid) — no BIO, no softmax, no gap heuristics.
+  Handles nested + overlapping spans natively (cells are independent).
+  (train/models/biaffine_span_detection.py, configs/biaffine_span_detection.yaml)
+  Caveat: DataModule's span_ids (one id per token) can only encode
+  non-overlapping GOLD spans; overlapping gold data would need the DataModule
+  to emit span boundaries directly. The model side supports overlap already.
+
+Alternatives considered for overlap: span enumeration/spancat (O(L·W), bad for
+long causal spans), W2NER (adds discontinuous spans, more machinery),
+DETR-style set prediction (Hungarian matching, slow convergence, overkill here).
+
+First biaffine run (5mhywdxk) scored f1_gran=0.453 — looked worse than the best
+attention run (0.744) but raw span_f1=0.866, IoU=0.76, precision=0.82,
+recall=0.96. Granularity=3.6 was the actual problem: independent per-cell
+sigmoid thresholding fires on multiple overlapping/off-by-one (start,end)
+candidates for the same gold span, producing ~3.6 predicted spans per gold
+span. Fixed with greedy NMS decoding (rank candidates by score, accept only if
+non-overlapping with an already-accepted span) — a decode-time fix, no
+retraining needed. Re-evaluating the same checkpoint with NMS:
+f1_gran 0.453 -> 0.834, granularity 3.6 -> 1.07, IoU 0.76 -> 0.80.
+decode_spans_from_grid(..., allow_overlap=False) is now the default; set
+allow_overlap=True to get every above-threshold cell back (needed once gold
+data has real overlapping spans, since NMS enforces non-overlap by design).
+
+Full retrain with NMS wired into validation (checkpoint selection + early
+stopping now use the corrected metric), run ruaye6wq:
+  f1_gran=0.834  precision=0.855  recall=0.906  granularity=1.07  IoU=0.804
+NEW BEST, beats the attention model's 0.744. Still improving at epoch 19/20
+(early-stop patience=10 never triggered) — more epochs likely help further.
+Checkpoint: clear27-rscience-corpus/ruaye6wq/checkpoints/biaffine-span-epoch=19-f1granval/span_f1_gran=0.834.ckpt
+
+Longer run (max_epochs=35, same config) confirms convergence: early-stopped at
+epoch 19 (patience=10 validation checks, val_check_interval=0.5 -> 5 epochs
+without improvement), best at epoch 14, f1_gran=0.840 — only +0.006 over the
+20-epoch run, so 20 epochs is enough in practice. Run fnk81q1w. Checkpoint:
+clear27-rscience-corpus/fnk81q1w/checkpoints/biaffine-span-epoch=14-f1granval/span_f1_gran=0.840.ckpt
+THIS IS THE BEST MODEL SO FAR — recommended Step 2a checkpoint.
+
+Backbone ablation: DeBERTa-v3-large (microsoft/deberta-v3-large) swapped in for
+RoBERTa-large, same biaffine architecture/config
+(train/configs/biaffine_span_detection_deberta.yaml). Result: best f1_gran=0.819
+(epoch 6, run 78aiv8vu) vs. RoBERTa-large's 0.840 — converges faster (near-peak
+by epoch 3-4) but plateaus ~2pts lower; precision/recall/granularity comparable
+(0.85/0.89/1.07). Gap is within noise range for a 340-sentence dev set, so read
+as "no clear win from the backbone swap," not "DeBERTa is worse." RoBERTa-large
+remains the recommended backbone.
+Note: microsoft/deberta-v3-large ships fp16 weights on HF Hub (unlike RoBERTa's
+fp32), which crashed the manual eval-mode forward used for W&B heatmap logging
+(dtype mismatch against the fp32 span_head, outside the trainer's autocast
+context). Fixed by forcing torch_dtype=torch.float32 in AutoModel.from_pretrained
+for both biaffine_span_detection.py and attention_span_detection.py — affects
+any future backbone swap to an fp16-published checkpoint.
+Requires `pip install sentencepiece` for the DebertaV2Tokenizer (not needed for
+RoBERTa's BPE tokenizer).
+
+Training data for these runs: CNC + PubMedCausal + BECauSEv2 + AltLex spans,
+SCITE included as hard negatives only (annotations stripped via
+negatives_only_paths — its span conventions conflict with CNC).
+
+-- Canonization (Step 3) --
+
+ParsingCanonizer expands spans to full noun phrases via spaCy dependency parse.
+Only 15.7% of spans are actually changed; most are returned verbatim.
+
+Known failure modes:
+  Over-expansion    "Japanese patient" → full title (cap when result > 80% of title length)
+  VP truncation     "improves heart regeneration" → "heart regeneration" (verb dropped)
+  Spurious heads    "Low oxygen environment" → "Low oxygen environment results"
+  No coreference    Pronouns/demonstratives unresolved (_coref stub not implemented)
+
+Tried and abandoned: TransformerCanonizer (Qwen2.5-3B) — hallucinated and changed meaning.
+
+Better approaches (future work):
+  Embed-cluster-label  Cluster spans with SBERT/E5, pick centroid as canonical.
+                       State of the art per COMBO (EACL 2023). Key papers: CESI (WWW 2018),
+                       CMVC (KDD 2022). Natural pre-processing step before step 4.
+  LLM-as-verifier      Use LLM only to confirm cluster merges ("same concept?"), not generate.
+                       Paper: EDC (EMNLP 2024, arXiv 2404.03868).
+
+-- Extraction Quality --
+
+Filters applied in TransformerExtractor (live in code):
+  - no_rel pairs dropped before DB insert
+  - spans with len < 5 chars dropped
+
+Remaining noise after filtering (~5-10% of relations):
+  - Partial subword tokens ("elly fat", "orect") not caught by length filter
+  - Occasional cause/effect reversal (e.g., direction inverted for implicit causals)
+
+Good examples from manual inspection:
+  "Coffee consumption" → "reduced risk of hepatocellular carcinoma"
+  "chiropractic manipulation of neck" → "stroke"
+  "legalized recreational marijuana" → "reduce prescription opioid use"
+  "Clean Air Act of 1970" → "over 10% reduction in pollution"
+
+-- Step 4 Hierarchy: PoincareClusterer failure diagnosis and fix (2026-07-01/02) --
+
+Diagnosis: PoincareClusterer (cone-based recursive subdivision, using the
+conf-causal-hierarchical-embeddings ugao25w3 checkpoint) produced a structurally
+wrong hierarchy when inspected on real pipeline.db output. Root cause traced to
+two compounding issues:
+
+  1. Radial collapse in the embedding model itself. All embeddings (WordNet,
+     AbsPyramid, Reddit events alike) land at Poincaré-ball norm 0.15-0.4. With
+     cone_K=0.5, the cone aperture ψ(u)=arcsin(K(1-‖u‖²)/‖u‖) saturates to 90°
+     (a plain half-space) whenever ‖u‖ < √2-1 ≈ 0.414 — true for the vast
+     majority of embeddings. Depth ordering itself still works reasonably
+     (parent norm < child norm most of the time), but cones carry far less
+     depth-discriminating signal than intended.
+
+  2. Reddit causal events are mostly FLAT (same specificity): "climate change",
+     "cancer", "depression" are all roughly equally abstract. Min-norm head
+     selection over such a pool is directional noise, not real discovery — and
+     the old algorithm still force-assigned every event to its least-bad
+     (argmin cone-energy) head even when NO head's cone actually contained it
+     (E>0 for every candidate). Concretely: root cluster labels were arbitrary
+     AbsPyramid phrases ("an excess of neural activity in specific regions of
+     the brain"), and semantically unrelated events landed together (a leaf
+     labeled "immune response" contained only "climate change" instances).
+     Sampling showed ~47% of events had E=0 for NO candidate parent yet were
+     still force-parented.
+
+Fix: AnchorConeClusterer (pipeline/step4_hierarchy/anchor_cone.py), now the
+default in pipeline.yaml. Key differences from PoincareClusterer:
+  - Anchors are FIXED and external — a 390-synset WordNet scaffold with real
+    IS-A edges (build_wordnet_anchors.py: all noun synsets at depth<=3, plus a
+    curated r/science domain seed list with its ancestor closure to the root).
+    Events attach to anchors; they never become heads for each other.
+  - An event attaches to an anchor ONLY if E(anchor,event)=0. No valid anchor
+    -> the event is left in an explicit "(unclustered)" bucket, not force
+    assigned. Precision over coverage, by design.
+  - Among all anchors that DO contain an event, the parent is the one with the
+    LARGEST norm (tightest/most specific cone), not minimum energy — fixes
+    cases where an event fits inside 7 nested ancestor cones and the old
+    code picked the wrong (too-general) one.
+
+Validated on 8,000 real relations sampled from pipeline.db (ugao25w3 checkpoint,
+unchanged): "cancer" now resolves through its genuine WordNet ancestor chain
+(cancer -> malignant tumor -> malignancy -> disease -> illness -> ... -> entity).
+"climate change" -> environmental condition -> condition -> state -> attribute
+-> abstraction -> entity. "depression", "anxiety", "brain", "obesity", "global
+warming" are honestly left unclustered rather than forced into nonsense parents.
+Coverage: 56.3% (6,040 / 10,723 unique events) at this sample size.
+
+Expected improvement path: coverage should rise once the depth_margin fix (see
+conf-causal-hierarchical-embeddings/notes.txt) lands in a retrained checkpoint —
+the radial collapse is what's limiting how many events cleanly satisfy E=0 in
+the first place. Swapping in the fixed checkpoint's path is the only change
+needed in pipeline.yaml (checkpoint_path under step4_hierarchy).
+
+PoincareClusterer is kept as a commented alternative in pipeline.yaml for
+comparison; it is no longer the recommended path for this dataset shape
+(events with no latent abstraction gradient among themselves).
+
+-- Step 4: leaf-cluster size fix (2026-07-05) --
+
+Diagnosis: leaves (level=0, no used descendant) should generalize over
+multiple posts that can't be sensibly split further — they should not be a
+one-off match to an overly specific anchor. Measured on the production DB
+(157,172-relation, biaffine+old-canonizer run): 21.3% of leaf clusters were
+singletons (exactly 1 event), 36.4% had <=2 members, median 4. On the smaller
+8K-post test DB it was worse (43.0% singleton, median 2). Root cause: the
+anchor scaffold is fixed and external (~27K WordNet/Wikidata/GO nodes); an
+event attaches to whichever anchor's cone most tightly contains it, with
+nothing enforcing a minimum member count per anchor — unlike the old
+PoincareClusterer's explicit min_cluster_size-driven adaptive subdivision.
+With tens of thousands of available anchors, many very specific ones are
+naturally hit by only one or two corpus events.
+
+Fix: pipeline/step4_hierarchy/anchor_cone.py::_collapse_small_leaves() — a
+post-process on the anchor assignment (after _assign_events_to_anchors, before
+tree-building) that merges any leaf below `min_leaf_size` (default 5) into
+its nearest ancestor with enough accumulated members. Does not change
+coverage (an event keeps SOME anchor), only which specific anchor ends up as
+its leaf.
+  Implementation note: the first version processed anchors one at a time
+  (deepest first) and climbed a node past its parent immediately if that
+  parent's count-so-far was still under threshold — but this could skip a
+  parent that WOULD have met threshold once ALL its children (not just the
+  one being processed) had contributed. E.g. two sibling leaves with 1 and 2
+  events (threshold 3): processing the first sibling alone saw the parent at
+  only 1 event and kept climbing past it to the grandparent, before the
+  second sibling ever got a chance to also contribute to the parent. Fixed
+  with a proper bottom-up tree DP (post-order resolution: a node only decides
+  whether to keep its pooled count or defer to its own parent AFTER all of
+  its children have been resolved). 5 unit tests cover sibling pooling,
+  disabled mode (min_leaf_size<=1), full climb to root, deep-chain climbing,
+  and already-sufficient leaves being left alone.
+
+Validated on the test DB: leaf count dropped 2,288 -> 576 (small ones merged
+away), singleton leaves 43.0% -> 0.0%, median member count 2 -> 9, coverage
+unchanged at 73.9% as designed. Wired into both pipeline.yaml and
+pipeline_test.yaml as `min_leaf_size: 5` under step4_hierarchy. Not yet run
+against the full production DB — needs a fresh Step 4 run after the
+SentenceCanonizer Step 3 run above finishes (Step 4 is cheap, ~5 min at full
+scale, and needs rerunning anyway since new canonical sentences change the
+embeddings).
+
+-- Graph Validation (todo for paper) --
+
+Priority order:
+
+1. Human precision eval  Sample 200-300 random relations; judge direction, causal validity,
+   plausibility. Report precision + Cohen's κ (two-pass or two annotators).
+   Baseline: CauseNet reports ~83% precision on a 200-sample human eval.
+
+2. Cluster coherence  Intra- vs. inter-cluster cosine similarity (all-MiniLM-L6-v2).
+   Silhouette score on a subsample (full O(n²) infeasible at 193K).
+
+3. ConceptNet comparison  Overlap with Causes/HasSubevent/xReason edges:
+   (a) coverage of known pairs, (b) direction agreement rate.
+   See WikiCausal (ISWC 2024) for methodology against Wikidata ground truth.
+
+4. Countercausal novelty  38K countercausal relations vs. effectively 0 in CauseNet /
+   ConceptNet. Easy differentiator to quantify.
+
+5. Scale/quality framing vs. prior work:
+   CauseNet 11.6M (no canonicalization, no hierarchy, no countercausal)
+   CausalBank ~314K · our graph 193K deduplicated, typed, hierarchical, science domain.
+
+6. Downstream eval (optional)  Retrieval-augmented COPA / e-CARE / CausalQA.
+
+-- Datasets (span-level annotations) --
+
+CNC/RECESS (IJCNLP-AACL 2023)   News. ARG0/ARG1/SIG0 spans. 2,754 relations.
+  Used for training. github.com/tanfiona/CausalNewsCorpus
+  Best system: F1=72.8 (RoBERTa-Large + CRF, CASE@RANLP 2023).
+
+BECauSE 2.0 (ACL LAW 2017)      Multi-genre. 1,803 instances. github.com/duncanka/BECAUSE
+
+PubMedCausal (2025, arXiv 2605.28363)  Biomedical. 6,491 pairs. Inter-sentential.
+
+PDTB 3.0 (Webber et al. 2019)   WSJ. ~9,190 Contingency.Cause examples. LDC licensed.
+
+UniCausal (DaWaK 2023, arXiv 2208.09163)  Unified benchmark (BECauSE + CNC + others).
+  Three tasks: sequence classification, span detection, pair classification.
+  Primary benchmarking reference. github.com/tanfiona/UniCausal
+
+No span annotations: SemEval-2010 T8, CausalTimeBank, AltLex, CausalBank, ATOMIC 2020,
+  GLUCOSE, e-CARE — not suitable for span extraction training.
+
+-- Related Work: Large-Scale Causal Graph Construction --
+
+CauseNet (CIKM 2020)     11.6M relations, ClueWeb12 + Wikipedia, BiLSTM-CRF.
+  No canonicalization, no hierarchy, no countercausal. causenet.org
+
+WikiCausal (ISWC 2024, arXiv 2409.00331)  Wikipedia → Wikidata-aligned KG.
+  Entity linking (BLINK) as canonicalization. Evaluation vs. Wikidata — adapt for us.
+  github.com/IBM/wikicausal
+
+GPTKB (2024, arXiv 2411.04920)  105M GPT-4o-mini triples. SentenceTransformer clustering
+  reduced 688K relation names to 2,133. Reference for the clustering canonicalization approach.

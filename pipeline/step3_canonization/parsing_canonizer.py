@@ -144,6 +144,8 @@ def find_enclosing_np(doc, span: Tuple[int, int], text):
             # If token exists in the doc and its syntactic head matches the prechunk,
             # treat the NP as a valid enclosing phrase
             # example: "triggers inflammation". prechunk = "triggers", head of "inflammation" = "triggers"
+            if token not in text_doc:
+                continue
             if head_doc[text_doc.index(token)].text == prechunk.rstrip():
                 checker = True
                 break
@@ -349,7 +351,10 @@ class ParsingCanonizer(EventCanonizer):
             # ------------------------------------
             # (1) RUN NP Completion
             # ------------------------------------
-            expanded_np = _noun_phrase_completion(text, (start, end), nlp)
-            resolved_spans.append(expanded_np)
+            if nlp is None:
+                resolved_spans.append(text[start:end])
+            else:
+                expanded_np = _noun_phrase_completion(text, (start, end), nlp)
+                resolved_spans.append(expanded_np)
 
         return resolved_spans

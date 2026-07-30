@@ -261,7 +261,7 @@ def create_app() -> FastAPI:
                 num_comments=0,
                 created_utc=0,
             )
-            for rel in extractor.extract(post):
+            for rel in extractor.extract([post])[0]:
                 rel.post_title = text  # full input text as canonization context
                 raw_relations.append((rel, sent_text, sent_offset))
 

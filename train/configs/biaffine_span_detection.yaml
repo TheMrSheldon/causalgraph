@@ -1,0 +1,66 @@
+# Step 2a (alternative) — Biaffine Span-Grid Causal Span Detection.
+# NER-as-parsing (Yu et al. 2020): every (start, end) token pair is scored by
+# a biaffine classifier; a cell above threshold is a predicted span. Supports
+# nested/overlapping spans natively; no BIO transitions or decoding heuristics.
+# Span-grid heatmaps are logged to W&B each epoch.
+# Training data: same multi-source mix as attention_span_detection.yaml.
+trainer:
+  max_epochs: 35
+  accelerator: gpu
+  devices: 1
+  precision: 16-mixed
+  gradient_clip_val: 1.0
+  val_check_interval: 0.5
+  log_every_n_steps: 20
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      project: clear27-rscience-corpus
+      entity: causenet
+      name: biaffine-span-grid-nms-35ep
+      log_model: true
+  callbacks:
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: val/span_f1_gran
+        mode: max
+        save_top_k: 1
+        filename: biaffine-span-{epoch:02d}-f1gran{val/span_f1_gran:.3f}
+    - class_path: lightning.pytorch.callbacks.EarlyStopping
+      init_args:
+        monitor: val/span_f1_gran
+        mode: max
+        patience: 10
+    - class_path: lightning.pytorch.callbacks.LearningRateMonitor
+      init_args:
+        logging_interval: step
+
+model:
+  class_path: train.models.biaffine_span_detection.BiaffineSpanDetectionModule
+  init_args:
+    model_name: roberta-large
+    learning_rate: 1e-5
+    backbone_lr: 1e-6
+    weight_decay: 0.1
+    warmup_steps: 400
+    ffn_dim: 256
+    dropout: 0.2
+    pos_weight_clamp: 20.0
+    span_threshold: 0.5
+
+data:
+  class_path: train.data.attention_span_detection.AttentionSpanDetectionDataModule
+  init_args:
+    train_paths:
+      - train/datasets/countercausal-news-corpus/causal-candidate-extraction/train.jsonl
+      - /mnt/ceph/storage/data-tmp/2026/thagen/causalatee/resources/datasets/SCITE/causal-candidate-extraction/train.parquet
+      - /mnt/ceph/storage/data-tmp/2026/thagen/causalatee/resources/datasets/PubMedCausal/causal-candidate-extraction/train.parquet
+      - /mnt/ceph/storage/data-tmp/2026/thagen/causalatee/resources/datasets/BECauSEv2/causal-candidate-extraction/train.parquet
+      - /mnt/ceph/storage/data-tmp/2026/thagen/causalatee/resources/datasets/AltLex/causal-candidate-extraction/train.parquet
+    negatives_only_paths:
+      - /mnt/ceph/storage/data-tmp/2026/thagen/causalatee/resources/datasets/SCITE/causal-candidate-extraction/train.parquet
+    val_path: train/datasets/countercausal-news-corpus/causal-candidate-extraction/dev.jsonl
+    model_name: roberta-large
+    max_length: 128
+    batch_size: 32
+    num_workers: 4

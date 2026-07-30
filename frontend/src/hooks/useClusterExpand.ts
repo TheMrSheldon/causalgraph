@@ -7,25 +7,27 @@ interface ExpandState {
   edges: GraphEdge[]
 }
 
-export function useClusterExpand() {
+export function useClusterExpand(minPostCount = 1) {
   const [expandedClusters, setExpandedClusters] = useState<Set<number>>(new Set())
-  const [cache, setCache] = useState<Map<number, ExpandState>>(new Map())
+  // Cache key: `${clusterId}:${minPostCount}` — re-fetches when threshold changes
+  const [cache, setCache] = useState<Map<string, ExpandState>>(new Map())
   const [loading, setLoading] = useState(false)
 
   const expandCluster = useCallback(
     async (clusterId: number, contextIds: number[] = []) => {
-      if (!cache.has(clusterId)) {
+      const key = `${clusterId}:${minPostCount}`
+      if (!cache.has(key)) {
         setLoading(true)
         try {
-          const data = await api.expandCluster(clusterId, contextIds)
-          setCache((prev) => new Map(prev).set(clusterId, data))
+          const data = await api.expandCluster(clusterId, contextIds, minPostCount)
+          setCache((prev) => new Map(prev).set(key, data))
         } finally {
           setLoading(false)
         }
       }
       setExpandedClusters((prev) => new Set(prev).add(clusterId))
     },
-    [cache]
+    [cache, minPostCount]
   )
 
   const collapseCluster = useCallback((clusterId: number) => {
@@ -36,7 +38,8 @@ export function useClusterExpand() {
       while (queue.length > 0) {
         const id = queue.shift()!
         next.delete(id)
-        const children = cache.get(id)
+        const key = `${id}:${minPostCount}`
+        const children = cache.get(key)
         if (children) {
           for (const child of children.nodes) {
             if (next.has(child.id)) queue.push(child.id)
@@ -45,7 +48,7 @@ export function useClusterExpand() {
       }
       return next
     })
-  }, [cache])
+  }, [cache, minPostCount])
 
   const isExpanded = useCallback(
     (clusterId: number) => expandedClusters.has(clusterId),
@@ -53,9 +56,9 @@ export function useClusterExpand() {
   )
 
   const getExpandedData = useCallback(
-    (clusterId: number): ExpandState | undefined => cache.get(clusterId),
-    [cache]
+    (clusterId: number): ExpandState | undefined => cache.get(`${clusterId}:${minPostCount}`),
+    [cache, minPostCount]
   )
 
-  return { expandCluster, collapseCluster, isExpanded, getExpandedData, loading }
+  return { expandCluster, collapseCluster, isExpanded, getExpandedData, expandedClusters, loading }
 }

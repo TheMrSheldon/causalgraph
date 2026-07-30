@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
 
-export function useGraph(level: number, minPostCount = 1) {
+export function useGraph(minPostCount = 1) {
   return useQuery({
-    queryKey: ['graph', level, minPostCount],
-    queryFn: () => api.getGraph(level, minPostCount),
+    queryKey: ['graph', 'roots', minPostCount],
+    queryFn: () => api.getGraph(undefined, minPostCount),
     staleTime: 5 * 60 * 1000,
   })
 }

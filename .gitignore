@@ -1,4 +1,7 @@
-data/
+/data/
+/wandb/
+/clear27-rscience-corpus/
+/train/datasets
 *.parquet
 
 

@@ -1,9 +1,10 @@
 export interface ClusterNode {
   id: number;
   label: string;
-  level: number; // 0=leaf, 1=mid, 2=top
+  level: number; // post-order height: 0=leaf, increases toward root
   parent_id: number | null;
   member_count: number;
+  has_children: boolean;
 }
 
 export interface GraphEdge {

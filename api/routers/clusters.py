@@ -20,14 +20,6 @@ from api.db import GraphDatabase
 router = APIRouter(prefix="/api/clusters", tags=["clusters"])
 
 
-def _to_node(raw: dict) -> ClusterNode:
-    return ClusterNode(
-        id=raw["id"],
-        label=raw["label"],
-        level=raw["level"],
-        parent_id=raw["parent_id"],
-        member_count=raw["member_count"],
-    )
 
 
 @router.get("/{cluster_id}", response_model=ClusterDetail)
@@ -45,8 +37,8 @@ def get_cluster(cluster_id: int, db: GraphDatabase = Depends(get_db)) -> Cluster
     all_relations = db.get_all_relations_for_posts(post_ids)
 
     return ClusterDetail(
-        cluster=_to_node(raw),
-        children=[_to_node(c) for c in children_raw],
+        cluster=ClusterNode.from_row(raw),
+        children=[ClusterNode.from_row(c) for c in children_raw],
         top_events=top_events,
         posts=[
             EdgePostSummary(
@@ -92,15 +84,15 @@ def expand_cluster(
     children_raw = db.get_children(cluster_id)
     if not children_raw:
         # Leaf node: return the node itself with its posts as a hint
-        return GraphResponse(nodes=[_to_node(parent)], edges=[])
+        return GraphResponse(nodes=[ClusterNode.from_row(parent)], edges=[])
 
     child_ids = [c["id"] for c in children_raw]
-    ext_ids = [int(x) for x in context_ids.split(",") if x.strip().lstrip("-").isdigit()]
+    ext_ids = [int(x) for x in context_ids.split(",") if x.strip().isdigit()]
     all_ids = child_ids + [eid for eid in ext_ids if eid not in child_ids]
     raw_edges = db.get_edges(cluster_ids=all_ids, min_post_count=min_post_count)
 
     return GraphResponse(
-        nodes=[_to_node(c) for c in children_raw],
+        nodes=[ClusterNode.from_row(c) for c in children_raw],
         edges=[
             GraphEdge(
                 source_cluster_id=e["source_cluster_id"],

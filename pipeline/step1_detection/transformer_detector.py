@@ -20,14 +20,21 @@ class TransformerDetector(CausalityDetector):
     ignored so extra config keys can be passed without error.
     """
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(
+        self,
+        batch_size: int = 64,
+        model: str = "thagen/roberta-large-causality-detection",
+        **kwargs,
+    ) -> None:
         device = _device()
-        logger.info("TransformerDetector: loading model on %s", "GPU:0" if device == 0 else "CPU")
+        logger.info("TransformerDetector: loading model %s on %s", model, "GPU:0" if device == 0 else "CPU")
         self._pipe = pipeline(
             "text-classification",
-            model="thagen/roberta-large-causality-detection",
+            model=model,
             device=device,
+            truncation=True,
         )
+        self._batch_size = batch_size
         logger.info("TransformerDetector: model ready")
 
     @property
@@ -36,7 +43,7 @@ class TransformerDetector(CausalityDetector):
 
     def detect(self, posts: list[Post]) -> list[Post]:
         logger.debug("TransformerDetector.detect: scoring %d posts", len(posts))
-        outputs = self._pipe((p.title for p in posts))
+        outputs = self._pipe((p.title for p in posts), batch_size=self._batch_size)
         causal = [p for p, o in zip(posts, outputs) if o["label"] == "causal"]
         logger.debug("TransformerDetector.detect: %d / %d posts classified as causal", len(causal), len(posts))
         return causal

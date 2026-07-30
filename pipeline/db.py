@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS causal_relations (
     extracted_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS relations_dedup_idx   ON causal_relations(post_id, cause_norm, effect_norm);
 CREATE INDEX IF NOT EXISTS relations_post_idx    ON causal_relations(post_id);
 CREATE INDEX IF NOT EXISTS relations_cause_idx   ON causal_relations(cause_norm);
 CREATE INDEX IF NOT EXISTS relations_effect_idx  ON causal_relations(effect_norm);
@@ -105,6 +106,20 @@ CREATE TABLE IF NOT EXISTS leaf_edges (
 );
 CREATE INDEX IF NOT EXISTS leaf_edges_src ON leaf_edges(source_cluster_id);
 CREATE INDEX IF NOT EXISTS leaf_edges_tgt ON leaf_edges(target_cluster_id);
+
+-- Pre-aggregated edges between sibling clusters at all hierarchy levels
+-- (populated by rebuild_expand_edges(); replaces expensive recursive CTE at query time)
+CREATE TABLE IF NOT EXISTS expand_edges (
+    source_cluster_id   INTEGER NOT NULL,
+    target_cluster_id   INTEGER NOT NULL,
+    relation_count      INTEGER NOT NULL DEFAULT 0,
+    post_count          INTEGER NOT NULL DEFAULT 0,
+    avg_score           REAL NOT NULL DEFAULT 0,
+    countercausal_count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (source_cluster_id, target_cluster_id)
+);
+CREATE INDEX IF NOT EXISTS expand_edges_src ON expand_edges(source_cluster_id);
+CREATE INDEX IF NOT EXISTS expand_edges_tgt ON expand_edges(target_cluster_id);
 """
 
 # SQL to (re)build the leaf_edges table — run once after Step 3
@@ -196,7 +211,7 @@ class Database:
         if not relations:
             return []
         sql = """
-            INSERT INTO causal_relations
+            INSERT OR IGNORE INTO causal_relations
                 (post_id, cause_text, effect_text, cause_norm, effect_norm,
                  cause_canonical, effect_canonical, confidence, extractor, relation_type)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -272,9 +287,21 @@ class Database:
     def clear_clusters(self) -> None:
         """Drop and recreate cluster data (for re-running Step 3)."""
         with self._connect() as conn:
+            conn.execute("DELETE FROM expand_edges")
             conn.execute("DELETE FROM leaf_edges")
             conn.execute("DELETE FROM cluster_members")
             conn.execute("DELETE FROM clusters")
+
+    def clear_relations(self) -> None:
+        """Drop causal_relations and everything downstream of it (clusters,
+        memberships, edges). Use before re-running Step 2 with a different
+        extractor/model — insert_relations() is INSERT OR IGNORE, so without
+        this, re-running Step 2 only adds new relations alongside stale ones
+        instead of replacing them.
+        """
+        self.clear_clusters()
+        with self._connect() as conn:
+            conn.execute("DELETE FROM causal_relations")
 
     def rebuild_leaf_edges(self) -> int:
         """Materialize the leaf-level edge table. Call once after Step 3."""
@@ -282,6 +309,75 @@ class Database:
             conn.executescript(_REBUILD_LEAF_EDGES_SQL)
             count = conn.execute("SELECT COUNT(*) FROM leaf_edges").fetchone()[0]
         return count
+
+    def rebuild_expand_edges(self) -> int:
+        """Pre-aggregate edges between sibling cluster pairs at all hierarchy levels.
+
+        For each leaf edge (A, B), walks both ancestor chains and accumulates the edge
+        wherever A's ancestor and B's ancestor share the same parent (i.e. are siblings).
+        Result stored in expand_edges so get_edges() can do a simple indexed lookup
+        instead of a recursive CTE at query time.
+        """
+        from collections import defaultdict
+
+        with self._connect() as conn:
+            # Load full cluster tree into memory (35K rows, trivial)
+            parent_of: dict[int, int | None] = {}
+            for row in conn.execute("SELECT id, parent_id FROM clusters"):
+                parent_of[row[0]] = row[1]
+
+            # Load all leaf edges
+            leaf_rows = conn.execute(
+                "SELECT source_cluster_id, target_cluster_id, "
+                "relation_count, post_count, avg_score, countercausal_count "
+                "FROM leaf_edges"
+            ).fetchall()
+
+            # aggregated[src][tgt] = [relation_count, post_count, score*posts, countercausal]
+            aggregated: dict[int, dict[int, list]] = defaultdict(lambda: defaultdict(lambda: [0, 0, 0.0, 0]))
+
+            for le in leaf_rows:
+                src, tgt = le[0], le[1]
+                rel, posts, avg_score, counter = le[2], le[3], le[4], le[5]
+                score_x_posts = (avg_score or 0.0) * posts
+
+                # Build ancestor→child mapping for src: parent_id → which child of parent is on src's path
+                src_path: dict[int | None, int] = {}  # parent_id → child on src's path
+                cur = src
+                while cur is not None:
+                    p = parent_of.get(cur)
+                    src_path[p] = cur
+                    cur = p
+
+                # Walk tgt's ancestor chain; whenever tgt's ancestor shares a parent with src's ancestor, record
+                cur = tgt
+                while cur is not None:
+                    p = parent_of.get(cur)
+                    if p in src_path:
+                        src_sibling = src_path[p]
+                        if src_sibling != cur:
+                            agg = aggregated[src_sibling][cur]
+                            agg[0] += rel
+                            agg[1] += posts
+                            agg[2] += score_x_posts
+                            agg[3] += counter
+                    cur = p
+
+            # Write to database
+            conn.execute("DELETE FROM expand_edges")
+            rows: list[tuple] = []
+            for s, targets in aggregated.items():
+                for t, (rel, posts, score_x_posts, counter) in targets.items():
+                    avg = score_x_posts / posts if posts > 0 else 0.0
+                    rows.append((s, t, rel, posts, avg, counter))
+
+            conn.executemany(
+                "INSERT OR REPLACE INTO expand_edges "
+                "(source_cluster_id, target_cluster_id, relation_count, post_count, avg_score, countercausal_count) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            return len(rows)
 
     def insert_clusters(self, clusters: list[EventCluster]) -> list[int]:
         """Insert clusters in level order (top → leaf) for FK integrity."""
